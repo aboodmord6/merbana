@@ -1,0 +1,114 @@
+{
+  "categories": [
+    { "id": "cat1", "name": "مشروبات ساخنة" },
+    { "id": "cat2", "name": "مشروبات باردة" },
+    { "id": "cat3", "name": "حلويات" },
+    { "id": "cat4", "name": "معجنات" },
+    { "id": "cat5", "name": "وجبات خفيفة" }
+  ],
+  "products": [
+    { "id": "p1",  "name": "قهوة عربية",        "price": 3000,  "categoryId": "cat1", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": false },
+    { "id": "p2",  "name": "قهوة تركية",        "price": 3500,  "categoryId": "cat1", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": false },
+    { "id": "p3",  "name": "لاتيه",              "price": 5000,  "categoryId": "cat1", "createdAt": "2026-02-10T08:00:00.000Z", "sizes": [{ "name": "صغير", "price": 4000 }, { "name": "كبير", "price": 5000 }], "trackStock": false },
+    { "id": "p4",  "name": "كابتشينو",           "price": 5000,  "categoryId": "cat1", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": false },
+    { "id": "p5",  "name": "شاي أخضر",           "price": 2500,  "categoryId": "cat1", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": false },
+    { "id": "p6",  "name": "عصير برتقال",        "price": 4500,  "categoryId": "cat2", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 20 },
+    { "id": "p7",  "name": "عصير ليمون بالنعنع",  "price": 4000,  "categoryId": "cat2", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 15 },
+    { "id": "p8",  "name": "سموذي مانجو",        "price": 6000,  "categoryId": "cat2", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 8 },
+    { "id": "p9",  "name": "موهيتو",             "price": 5500,  "categoryId": "cat2", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 3 },
+    { "id": "p10", "name": "كنافة",              "price": 7000,  "categoryId": "cat3", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 10 },
+    { "id": "p11", "name": "بسبوسة",             "price": 4000,  "categoryId": "cat3", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 12 },
+    { "id": "p12", "name": "تشيز كيك",           "price": 8000,  "categoryId": "cat3", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 5 },
+    { "id": "p13", "name": "فطيرة زعتر",         "price": 3500,  "categoryId": "cat4", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 18 },
+    { "id": "p14", "name": "فطيرة جبنة",         "price": 4000,  "categoryId": "cat4", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 14 },
+    { "id": "p15", "name": "سندويشة كلوب",       "price": 7500,  "categoryId": "cat5", "createdAt": "2026-02-10T08:00:00.000Z", "trackStock": true, "stock": 0 }
+  ],
+  "orders": [
+    {
+      "id": "o1", "orderNumber": 1, "date": "2026-02-14T08:15:00.000Z", "paymentMethod": "cash", "orderType": "dine_in", "total": 15000,
+      "items": [
+        { "productId": "p1", "name": "قهوة عربية", "price": 3000, "quantity": 2, "subtotal": 6000 },
+        { "productId": "p10", "name": "كنافة", "price": 7000, "quantity": 1, "subtotal": 7000 },
+        { "productId": "p5", "name": "شاي أخضر", "price": 2500, "quantity": 1, "subtotal": 2000 }
+      ]
+    },
+    {
+      "id": "o2", "orderNumber": 2, "date": "2026-02-14T09:00:00.000Z", "paymentMethod": "cash", "orderType": "takeaway", "total": 22500,
+      "items": [
+        { "productId": "p3", "name": "لاتيه", "price": 5000, "quantity": 2, "subtotal": 10000 },
+        { "productId": "p12", "name": "تشيز كيك", "price": 8000, "quantity": 1, "subtotal": 8000 },
+        { "productId": "p6", "name": "عصير برتقال", "price": 4500, "quantity": 1, "subtotal": 4500 }
+      ]
+    },
+    {
+      "id": "o3", "orderNumber": 3, "date": "2026-02-14T09:45:00.000Z", "paymentMethod": "shamcash", "orderType": "dine_in", "total": 18000,
+      "items": [
+        { "productId": "p4", "name": "كابتشينو", "price": 5000, "quantity": 2, "subtotal": 10000 },
+        { "productId": "p11", "name": "بسبوسة", "price": 4000, "quantity": 2, "subtotal": 8000 }
+      ]
+    },
+    {
+      "id": "o4", "orderNumber": 4, "date": "2026-02-14T10:30:00.000Z", "paymentMethod": "cash", "orderType": "dine_in", "total": 30000,
+      "items": [
+        { "productId": "p8", "name": "سموذي مانجو", "price": 6000, "quantity": 2, "subtotal": 12000 },
+        { "productId": "p13", "name": "فطيرة زعتر", "price": 3500, "quantity": 2, "subtotal": 7000 },
+        { "productId": "p14", "name": "فطيرة جبنة", "price": 4000, "quantity": 1, "subtotal": 4000 },
+        { "productId": "p10", "name": "كنافة", "price": 7000, "quantity": 1, "subtotal": 7000 }
+      ]
+    },
+    {
+      "id": "o5", "orderNumber": 5, "date": "2026-02-13T11:00:00.000Z", "paymentMethod": "cash", "orderType": "takeaway", "total": 12000,
+      "items": [
+        { "productId": "p2", "name": "قهوة تركية", "price": 3500, "quantity": 2, "subtotal": 7000 },
+        { "productId": "p7", "name": "عصير ليمون بالنعنع", "price": 4000, "quantity": 1, "subtotal": 4000 },
+        { "productId": "p1", "name": "قهوة عربية", "price": 3000, "quantity": 1, "subtotal": 1000 }
+      ]
+    },
+    {
+      "id": "o6", "orderNumber": 6, "date": "2026-02-13T14:00:00.000Z", "paymentMethod": "shamcash", "orderType": "dine_in", "total": 25000,
+      "items": [
+        { "productId": "p9", "name": "موهيتو", "price": 5500, "quantity": 2, "subtotal": 11000 },
+        { "productId": "p12", "name": "تشيز كيك", "price": 8000, "quantity": 1, "subtotal": 8000 },
+        { "productId": "p8", "name": "سموذي مانجو", "price": 6000, "quantity": 1, "subtotal": 6000 }
+      ]
+    },
+    {
+      "id": "o7", "orderNumber": 7, "date": "2026-02-12T10:00:00.000Z", "paymentMethod": "cash", "orderType": "takeaway", "total": 9000,
+      "items": [
+        { "productId": "p4", "name": "كابتشينو", "price": 5000, "quantity": 1, "subtotal": 5000 },
+        { "productId": "p11", "name": "بسبوسة", "price": 4000, "quantity": 1, "subtotal": 4000 }
+      ]
+    },
+    {
+      "id": "o8", "orderNumber": 8, "date": "2026-02-12T16:00:00.000Z", "paymentMethod": "cash", "orderType": "dine_in", "total": 21000,
+      "items": [
+        { "productId": "p3", "name": "لاتيه", "price": 5000, "quantity": 1, "subtotal": 5000 },
+        { "productId": "p6", "name": "عصير برتقال", "price": 4500, "quantity": 2, "subtotal": 9000 },
+        { "productId": "p10", "name": "كنافة", "price": 7000, "quantity": 1, "subtotal": 7000 }
+      ]
+    }
+  ],
+  "register": {
+    "currentBalance": 127500,
+    "transactions": [
+      { "id": "s1", "type": "sale", "amount": 15000, "note": "طلب #001 — نقدي", "date": "2026-02-14T08:15:00.000Z" },
+      { "id": "s2", "type": "sale", "amount": 22500, "note": "طلب #002 — نقدي", "date": "2026-02-14T09:00:00.000Z" },
+      { "id": "s3", "type": "sale", "amount": 18000, "note": "طلب #003 — ShamCash", "date": "2026-02-14T09:45:00.000Z" },
+      { "id": "s4", "type": "sale", "amount": 30000, "note": "طلب #004 — نقدي", "date": "2026-02-14T10:30:00.000Z" },
+      { "id": "s5", "type": "sale", "amount": 12000, "note": "طلب #005 — نقدي", "date": "2026-02-13T11:00:00.000Z" },
+      { "id": "s6", "type": "sale", "amount": 25000, "note": "طلب #006 — ShamCash", "date": "2026-02-13T14:00:00.000Z" },
+      { "id": "s7", "type": "sale", "amount": 9000, "note": "طلب #007 — نقدي", "date": "2026-02-12T10:00:00.000Z" },
+      { "id": "s8", "type": "sale", "amount": 21000, "note": "طلب #008 — نقدي", "date": "2026-02-12T16:00:00.000Z" },
+      { "id": "d1", "type": "deposit", "amount": 50000, "note": "رأس مال افتتاحي", "date": "2026-02-12T07:00:00.000Z" },
+      { "id": "w1", "type": "withdrawal", "amount": 75000, "note": "مسحوبات يومية", "date": "2026-02-13T22:00:00.000Z" }
+    ]
+  },
+  "users": [],
+  "activityLog": [],
+  "expenses": [
+    { "id": "e1", "amount": 15000, "category": "مستلزمات", "description": "أكواب ورقية وأغطية", "date": "2026-02-14T07:30:00.000Z" },
+    { "id": "e2", "amount": 8000,  "category": "صيانة",   "description": "إصلاح ماكينة القهوة", "date": "2026-02-13T09:00:00.000Z" },
+    { "id": "e3", "amount": 50000, "category": "إيجار",    "description": "إيجار المحل — شباط", "date": "2026-02-12T08:00:00.000Z" },
+    { "id": "e4", "amount": 5000,  "category": "نقل",      "description": "توصيل بضاعة", "date": "2026-02-12T12:00:00.000Z" }
+  ]
+}
