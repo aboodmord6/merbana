@@ -31,9 +31,14 @@ def main():
     print(f"  Project root: {project_root}")
     print("=" * 60)
 
-    # 1. Build frontend
-    print("\n⚛  Building React frontend ...")
-    run("npm run build", cwd=project_root)
+    # 1. Build frontend (if npm is available)
+    print("\n⚛  Checking frontend build ...")
+    if shutil.which("npm"):
+        print("▶  npm run build")
+        run("npm run build", cwd=project_root)
+    else:
+        print("⚠️  npm is not installed on this system.")
+        print("⚠️  Skipping frontend build. Ensure 'dist/index.html' was copied from the Windows machine.")
 
     if not (dist_dir / "index.html").exists():
         print("✗  Frontend build failed: dist/index.html not found.")
