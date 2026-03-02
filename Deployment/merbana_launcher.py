@@ -1,228 +1,197 @@
 """
-Merbana Launcher
-================
-Verifies USB hardware token then opens the bundled React app in a native
-pywebview window.
+merbana_launcher.py
+===================
+Embedded launcher used by the compiled distributable (Nuitka / PyInstaller).
 
-Build this file with build_distribution.py (uses Nuitka --onefile).
-When frozen by Nuitka, the bundled assets live next to the .exe; the
-script detects this via __compiled__ (Nuitka) rather than sys._MEIPASS
-(PyInstaller).
+Serves the bundled React SPA on a local port, then opens it inside a native
+desktop window via pywebview.
+
+Linux requirements (system packages)::
+
+    sudo apt install python3-gi gir1.2-webkit2-4.0 libgtk-3-dev
+
 """
 
+import http.server
 import os
+import socket
+import socketserver
 import sys
-import json
-import hmac
-import hashlib
-import ctypes
-import argparse
 import threading
-import time
-import logging
-from datetime import datetime
-from pathlib import Path
 
-import webview
+# ── Configuration ────────────────────────────────────────────
+PORT = 8741
+HOST = "127.0.0.1"
+APP_NAME = "Merbana - إدارة الطلبات"
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 820
 
-from config import SECRET_KEY, TOKEN_FILENAME, APP_NAME, get_drive_serial
 
-# ── Logging setup ─────────────────────────────────────────────
-def _setup_logging(base_dir: Path) -> None:
-    log_path = base_dir / "merbana.log"
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_path, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
+# ── Path resolution ──────────────────────────────────────────
+
+def get_dist_path() -> str:
+    """
+    Resolve the bundled ``dist/`` folder whether running:
+    - as a plain .py script
+    - frozen by PyInstaller  (_MEIPASS)
+    - compiled by Nuitka     (__compiled__)
+    """
+    # PyInstaller onefile / onedir
+    if getattr(sys, "_MEIPASS", None):
+        return os.path.join(sys._MEIPASS, "dist")
+
+    # Nuitka compiled: executable lives next to the embedded data
+    if getattr(sys, "__compiled__", False):
+        return os.path.join(os.path.dirname(sys.executable), "dist")
+
+    # Plain script: <project>/Deployment/merbana_launcher.py  → dist is one level up
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dist")
+
+
+# ── SPA HTTP handler ─────────────────────────────────────────
+
+class SPAHandler(http.server.SimpleHTTPRequestHandler):
+    """SimpleHTTPRequestHandler with React Router fallback."""
+
+    def do_GET(self):
+        file_path = os.path.join(self.directory, self.path.lstrip("/"))
+        if os.path.isfile(file_path):
+            return super().do_GET()
+        self.path = "/index.html"
+        return super().do_GET()
+
+    def log_message(self, format, *args):  # silence request logs
+        pass
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        super().end_headers()
+
+
+# ── Helpers ──────────────────────────────────────────────────
+
+def find_free_port(start: int) -> int:
+    port = start
+    while port < start + 100:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((HOST, port))
+                return port
+        except OSError:
+            port += 1
+    return start
+
+
+def start_server(dist_path: str, port: int) -> socketserver.TCPServer:
+    handler = lambda *a, **kw: SPAHandler(*a, directory=dist_path, **kw)
+    socketserver.TCPServer.allow_reuse_address = True
+    httpd = socketserver.TCPServer((HOST, port), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd
+
+
+def show_fatal(title: str, message: str) -> None:
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(title, message)
+        root.destroy()
+    except Exception:
+        print(f"FATAL: {title}\n{message}", file=sys.stderr)
+        sys.exit(1)
+
+
+# ── pywebview window ─────────────────────────────────────────
+
+def run_with_webview(dist_path: str, port: int) -> None:
+    import webview  # noqa: PLC0415
+
+    httpd = start_server(dist_path, port)
+    url = f"http://{HOST}:{port}"
+
+    window = webview.create_window(
+        APP_NAME,
+        url,
+        width=WINDOW_WIDTH,
+        height=WINDOW_HEIGHT,
+        resizable=True,
+        min_size=(800, 600),
+        text_select=True,
     )
 
-log = logging.getLogger(__name__)
+    # gui=None  → auto-detect:  GTK/WebKitWebView on Linux, WinForms/EdgeChromium on Windows
+    webview.start()
+    httpd.shutdown()
 
 
-# ── Resource path ─────────────────────────────────────────────
-def get_base_dir() -> Path:
-    """
-    Returns the directory that contains program assets.
-    - Nuitka onefile: assets are in a temp extraction folder next to the exe,
-      exposed via sys._MEIPASS in PyInstaller but as a sibling "dist" folder
-      placed next to the exe by our build script when using Nuitka.
-    - Nuitka standalone: same directory as the exe.
-    - Development: project root (one level above Deployment/).
-    """
-    if getattr(sys, "frozen", False):
-        # Running as a compiled (frozen) executable
-        # Nuitka sets __compiled__ = True and sys.executable points to the exe
-        return Path(sys.executable).parent
-    else:
-        # Running from source
-        return Path(__file__).parent.parent
+def run_with_browser(dist_path: str, port: int) -> None:
+    """Fallback: open the default browser + a small tkinter control window."""
+    import tkinter as tk
+    import webbrowser
+
+    httpd = start_server(dist_path, port)
+    url = f"http://{HOST}:{port}"
+    webbrowser.open(url)
+
+    root = tk.Tk()
+    root.title("Merbana Server")
+    root.geometry("380x180")
+    root.resizable(False, False)
+    root.configure(bg="#1a1a2e")
+
+    x = (root.winfo_screenwidth() // 2) - 190
+    y = (root.winfo_screenheight() // 2) - 90
+    root.geometry(f"+{x}+{y}")
+
+    tk.Label(root, text="Merbana", font=("Segoe UI", 18, "bold"),
+             fg="#e94560", bg="#1a1a2e").pack(pady=(20, 4))
+    tk.Label(root, text=f"Running on port {port}",
+             font=("Segoe UI", 9), fg="#a0a0b0", bg="#1a1a2e").pack()
+    tk.Label(root, text="Close this window to stop.",
+             font=("Segoe UI", 9), fg="#707080", bg="#1a1a2e").pack(pady=(4, 12))
+    tk.Button(root, text="Open in Browser", bg="#e94560", fg="white",
+              relief="flat", cursor="hand2", padx=12, pady=4,
+              command=lambda: webbrowser.open(url)).pack()
+
+    def on_close():
+        httpd.shutdown()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.mainloop()
 
 
-# ── USB / hardware token verification ─────────────────────────
-def get_current_drive() -> str:
-    """Return drive letter where the executable (or script) lives."""
-    path = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()
-    return path.drive.replace(":", "")  # e.g. 'E'
+# ── Entry point ──────────────────────────────────────────────
 
-
-def verify_token() -> tuple[bool, str]:
-    """
-    Verifies auth.token exists in the root of the current drive and that
-    its HMAC fingerprint matches the drive's serial number.
-    Returns (True, "OK") or (False, error_message).
-    """
-    drive = get_current_drive()
-    token_path = Path(f"{drive}:\\") / TOKEN_FILENAME
-
-    if not token_path.exists():
-        return False, f"Auth token not found on {drive}:\\"
-
-    try:
-        token_data = json.loads(token_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        return False, f"Token file unreadable: {exc}"
-
-    serial = get_drive_serial(drive)
-    if not serial:
-        return False, f"Cannot read serial number of drive {drive}:\\"
-
-    expected = hmac.new(SECRET_KEY, serial.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(token_data.get("fingerprint", ""), expected):
-        return False, "Hardware mismatch — app may have been copied to an unauthorised drive."
-
-    # Optional: check expiry
-    expires = token_data.get("expires")
-    if expires:
-        try:
-            exp_dt = datetime.fromisoformat(expires)
-            if datetime.utcnow() > exp_dt:
-                return False, f"Licence expired on {exp_dt.date()}."
-        except ValueError:
-            pass  # Ignore malformed date
-
-    return True, "OK"
-
-
-# ── Database injection ─────────────────────────────────────────
-def inject_database(window: webview.Window, db_path: str) -> None:
-    """
-    Reads a JSON database file and calls window.injectDatabase() in the
-    React app after the UI signals it is ready (up to 30 s).
-    """
-    db_file = Path(db_path)
-    if not db_file.exists():
-        log.warning("DB file not found: %s", db_path)
-        return
-
-    try:
-        raw = db_file.read_text(encoding="utf-8")
-        json.loads(raw)  # validate JSON before injecting
-        safe = json.dumps(raw)  # escape for JS string literal
-    except Exception as exc:
-        log.error("Failed to read DB file: %s", exc)
-        return
-
-    js_inject = f"window.injectDatabase({safe})"
-    js_ready_check = "typeof window.injectDatabase === 'function'"
-
-    log.info("Waiting for app to expose injectDatabase …")
-    for attempt in range(30):
-        time.sleep(1)
-        try:
-            ready = window.evaluate_js(js_ready_check)
-            if ready:
-                window.evaluate_js(js_inject)
-                log.info("Database injected from %s", db_path)
-                return
-        except Exception as exc:
-            log.debug("Attempt %d: %s", attempt + 1, exc)
-
-    log.error("Timed out waiting for injectDatabase() — DB was not injected.")
-
-
-# ── pywebview API exposed to JS ────────────────────────────────
-class NativeApi:
-    """Methods callable from the web app via window.pywebview.api.*"""
-
-    def __init__(self) -> None:
-        self._window: webview.Window | None = None
-
-    def set_window(self, w: webview.Window) -> None:
-        self._window = w
-
-    def log(self, message: str) -> None:  # noqa: A003
-        log.info("[UI] %s", message)
-
-    def get_app_version(self) -> str:
-        return "1.0.0"
-
-
-# ── Entry point ────────────────────────────────────────────────
 def main() -> None:
-    base_dir = get_base_dir()
-    _setup_logging(base_dir)
-    log.info("Merbana launcher starting")
+    dist_path = get_dist_path()
 
-    # 1. Verify USB binding
-    is_valid, error_msg = verify_token()
-    if not is_valid:
-        log.error("Token verification failed: %s", error_msg)
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            f"Security Error:\n\n{error_msg}",
-            "Merbana — Access Denied",
-            0x10,  # MB_ICONERROR
+    if not os.path.isdir(dist_path):
+        show_fatal(
+            "Merbana — Error",
+            f"Build folder not found!\n\nExpected:\n{dist_path}\n\n"
+            "Make sure the 'dist' folder is bundled with the executable.",
         )
         sys.exit(1)
 
-    log.info("Token verified OK")
-
-    # 2. Parse CLI arguments
-    parser = argparse.ArgumentParser(description="Merbana Launcher")
-    parser.add_argument("-db", "--database", dest="db", metavar="PATH",
-                        help="Path to a JSON database file to inject on startup")
-    parser.add_argument("--debug", action="store_true",
-                        help="Enable pywebview debug mode")
-    args = parser.parse_args()
-
-    # 3. Locate built React app
-    dist_path = base_dir / "dist"
-    index_path = dist_path / "index.html"
-
-    if not index_path.exists():
-        msg = f"Application files not found.\nExpected: {index_path}"
-        log.error(msg)
-        ctypes.windll.user32.MessageBoxW(0, msg, "Merbana — Missing Files", 0x10)
+    if not os.path.isfile(os.path.join(dist_path, "index.html")):
+        show_fatal(
+            "Merbana — Error",
+            "index.html not found inside the build folder.\n"
+            "The build appears incomplete.",
+        )
         sys.exit(1)
 
-    log.info("Loading app from %s", index_path)
+    port = find_free_port(PORT)
 
-    # 4. Create window
-    api = NativeApi()
-    window = webview.create_window(
-        APP_NAME,
-        url=str(index_path),
-        js_api=api,
-        width=1280,
-        height=800,
-        min_size=(900, 600),
-        resizable=True,
-        text_select=False,
-        confirm_close=False,
-    )
-    api.set_window(window)
-
-    # 5. Inject DB in background (doesn't block the UI event loop)
-    if args.db:
-        t = threading.Thread(target=inject_database, args=(window, args.db), daemon=True)
-        t.start()
-
-    # 6. Start the webview event loop
-    webview.start(debug=args.debug)
-    log.info("Launcher exited cleanly")
+    try:
+        import webview  # noqa: F401
+        run_with_webview(dist_path, port)
+    except ImportError:
+        run_with_browser(dist_path, port)
 
 
 if __name__ == "__main__":

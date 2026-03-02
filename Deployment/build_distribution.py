@@ -1,7 +1,11 @@
 """
 build_distribution.py
 =====================
-Builds the Merbana application into a single distributable .exe.
+Builds the Merbana application into a single distributable .exe  (Windows).
+
+For a Linux binary run instead::
+
+    python Deployment/build_linux.py [--skip-frontend] [--backend gtk|qt]
 
 Steps
 -----
@@ -20,6 +24,7 @@ Requirements
 
 import argparse
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -51,6 +56,13 @@ def ensure_nuitka() -> None:
 # ── Main ───────────────────────────────────────────────────────
 
 def main() -> None:
+    if platform.system() != "Windows":
+        print(
+            "⚠  This script builds a Windows .exe and must run on Windows.\n"
+            "   For a Linux binary use:  python Deployment/build_linux.py"
+        )
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(description="Build Merbana distributable")
     parser.add_argument(
         "--skip-frontend", action="store_true",
