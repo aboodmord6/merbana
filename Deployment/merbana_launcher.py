@@ -18,6 +18,7 @@ import socket
 import socketserver
 import sys
 import threading
+from typing import Optional
 
 # Path to data/db.json — set before starting the server so the HTTP handler can
 # write the database back to disk on every /api/save-db POST request.
@@ -26,9 +27,33 @@ _data_path: str = ""
 # ── Configuration ────────────────────────────────────────────
 PORT = 8741
 HOST = "127.0.0.1"
+LOCK_PORT = 8742          # Reserved solely as a single-instance mutex
 APP_NAME = "Merbana - إدارة الطلبات"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 820
+
+
+# ── Single-instance lock ────────────────────────────────────
+
+_lock_socket: Optional[socket.socket] = None
+
+
+def acquire_single_instance_lock() -> bool:
+    """
+    Try to bind LOCK_PORT on loopback as a process mutex.
+    Returns True if this is the first (and only) running instance.
+    The socket is intentionally kept open for the lifetime of the process.
+    """
+    global _lock_socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        sock.bind((HOST, LOCK_PORT))
+        sock.listen(1)           # must listen so Windows doesn't free the port
+        _lock_socket = sock
+        return True
+    except OSError:
+        return False
 
 
 # ── Path resolution ──────────────────────────────────────────
@@ -236,6 +261,14 @@ def run_with_browser(dist_path: str, port: int) -> None:
 # ── Entry point ──────────────────────────────────────────────
 
 def main() -> None:
+    # ── Ensure only one instance runs at a time ──────────────
+    if not acquire_single_instance_lock():
+        show_fatal(
+            APP_NAME,
+            "Merbana is already running.\n\nClose the existing window and try again.",
+        )
+        sys.exit(0)
+
     dist_path = get_dist_path()
 
     if not os.path.isdir(dist_path):
