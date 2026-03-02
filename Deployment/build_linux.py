@@ -78,10 +78,17 @@ def check_webview_backend(backend: str) -> None:
             import gi  # noqa: F401
         except ImportError:
             print(
-                "\n⚠  PyGObject (gi) not found.\n"
-                "   Install system packages:\n"
+                "\n⚠  PyGObject (gi) not found.  Install system packages\n"
+                "   that match your Ubuntu/Debian version:\n\n"
+                "   Ubuntu 24.04 / Debian 13:\n"
                 "     sudo apt install python3-gi python3-gi-cairo "
-                "gir1.2-gtk-3.0 gir1.2-webkit2-4.1\n"
+                "gir1.2-gtk-3.0 gir1.2-webkitgtk-6.0\n\n"
+                "   Ubuntu 22.04 / Debian 12:\n"
+                "     sudo apt install python3-gi python3-gi-cairo "
+                "gir1.2-gtk-3.0 gir1.2-webkit2-4.1\n\n"
+                "   Ubuntu 20.04 / Debian 11:\n"
+                "     sudo apt install python3-gi python3-gi-cairo "
+                "gir1.2-gtk-3.0 gir1.2-webkit2-4.0\n"
             )
     elif backend == "qt":
         try:
@@ -188,6 +195,10 @@ def main() -> None:
     if args.backend == "gtk":
         hidden_imports += [
             "--hidden-import", "webview.platforms.gtk",
+            "--hidden-import", "gi",
+            "--hidden-import", "gi.repository.Gtk",
+            "--hidden-import", "gi.repository.WebKit2",
+            "--hidden-import", "gi.repository.WebKit",
         ]
     else:
         hidden_imports += [
@@ -234,9 +245,9 @@ def main() -> None:
     )
     if args.backend == "gtk":
         print(
-            "  sudo apt install \\\n"
-            "      python3-gi python3-gi-cairo gir1.2-gtk-3.0 \\\n"
-            "      gir1.2-webkit2-4.1\n"
+            "  Ubuntu 24.04: sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkitgtk-6.0\n"
+            "  Ubuntu 22.04: sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1\n"
+            "  Ubuntu 20.04: sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0\n"
         )
     else:
         print("  pip install PyQt5 PyQtWebEngine\n")

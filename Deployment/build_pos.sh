@@ -100,25 +100,56 @@ esac
 success "Core packages installed."
 
 # ── 3. WebKit2GTK / GTK (pywebview GTK backend) ───────────────────────────────
+# Package names differ by distro version:
+#   Ubuntu 24.04 / Debian 13  → webkitgtk-6.0   / gir1.2-webkitgtk-6.0
+#   Ubuntu 22.04 / Debian 12  → webkit2gtk-4.1  / gir1.2-webkit2-4.1
+#   Ubuntu 20.04 / Debian 11  → webkit2gtk-4.0  / gir1.2-webkit2-4.0
+apt_pkg_exists() { apt-cache show "$1" &>/dev/null 2>&1; }
+
 info "Installing GTK + WebKit2GTK system libraries …"
 case "${PKG_MGR}" in
     apt)
+        # Always install the GTK base and PyGObject bindings
         pkg_install \
             python3-gi python3-gi-cairo \
             gir1.2-gtk-3.0 \
-            gir1.2-webkit2-4.1 \
-            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             libglib2.0-dev
+
+        # Detect the best available WebKit2GTK version
+        if apt_pkg_exists "gir1.2-webkitgtk-6.0"; then
+            info "  → Using WebKitGTK 6.0 (Ubuntu 24.04 / Debian 13)"
+            pkg_install gir1.2-webkitgtk-6.0 libwebkitgtk-6.0-dev
+        elif apt_pkg_exists "gir1.2-webkit2-4.1"; then
+            info "  → Using WebKit2GTK 4.1 (Ubuntu 22.04 / Debian 12)"
+            pkg_install gir1.2-webkit2-4.1 libwebkit2gtk-4.1-dev
+        elif apt_pkg_exists "gir1.2-webkit2-4.0"; then
+            info "  → Using WebKit2GTK 4.0 (Ubuntu 20.04 / Debian 11)"
+            pkg_install gir1.2-webkit2-4.0 libwebkit2gtk-4.0-dev
+        else
+            warn "No WebKit2GTK dev package found in apt cache."
+            warn "Try:  sudo add-apt-repository ppa:webkit-team/ppa  then re-run."
+            warn "Continuing — pywebview will fall back to the browser launcher."
+        fi
         ;;
     dnf|yum)
-        pkg_install \
-            python3-gobject python3-cairo gobject-introspection \
-            webkit2gtk4.1 webkit2gtk4.1-devel \
-            gtk3 gtk3-devel
+        # Fedora 38+: webkit2gtk4.1;  older: webkit2gtk3
+        if "${PKG_MGR}" info webkit2gtk4.1 &>/dev/null 2>&1; then
+            pkg_install python3-gobject python3-cairo gobject-introspection \
+                webkit2gtk4.1 webkit2gtk4.1-devel gtk3 gtk3-devel
+        else
+            pkg_install python3-gobject python3-cairo gobject-introspection \
+                webkit2gtk3 webkit2gtk3-devel gtk3 gtk3-devel
+        fi
         ;;
     pacman)
-        pkg_install python-gobject webkit2gtk-4.1 gtk3
+        # Arch always ships the latest; try 4.1 then 4.0
+        if pacman -Ss "^webkit2gtk-4.1$" &>/dev/null 2>&1; then
+            pkg_install python-gobject webkit2gtk-4.1 gtk3
+        else
+            pkg_install python-gobject webkit2gtk gtk3
+        fi
         ;;
 esac
 success "WebKit2GTK libraries installed."
@@ -212,6 +243,11 @@ python -m PyInstaller \
     --hidden-import "webview" \
     --hidden-import "webview.http" \
     --hidden-import "webview.platforms.gtk" \
+    --hidden-import "webview.platforms.qt" \
+    --hidden-import "gi" \
+    --hidden-import "gi.repository.Gtk" \
+    --hidden-import "gi.repository.WebKit2" \
+    --hidden-import "gi.repository.WebKit" \
     "${LAUNCHER}"
 
 BINARY="${OUT_PYINSTALLER}/Merbana"
