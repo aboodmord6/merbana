@@ -32,10 +32,16 @@ WINDOW_HEIGHT = 820
 def get_dist_path() -> str:
     """
     Resolve the bundled ``dist/`` folder whether running:
+    - launched via the POS/Merbana shell wrapper  (MERBANA_DIST_PATH env var)
     - as a plain .py script
     - frozen by PyInstaller  (_MEIPASS)
     - compiled by Nuitka     (__compiled__)
     """
+    # Shell wrapper sets this explicitly — most reliable
+    env_path = os.environ.get("MERBANA_DIST_PATH", "")
+    if env_path and os.path.isdir(env_path):
+        return env_path
+
     # PyInstaller onefile / onedir
     if getattr(sys, "_MEIPASS", None):
         return os.path.join(sys._MEIPASS, "dist")

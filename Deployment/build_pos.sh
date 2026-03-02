@@ -9,22 +9,23 @@
 #
 #  What it does
 #  ------------
-#  1. Detects your distro (Debian/Ubuntu · Fedora/RHEL · Arch)
-#  2. Installs system packages  (Python 3, Node.js 20 LTS, GTK/WebKit)
-#  3. Creates a Python venv  (.venv)  and installs pywebview + pyinstaller
-#  4. npm ci  →  npm run build  (React SPA → dist/)
-#  5. PyInstaller --onefile  →  single  Merbana  binary
-#  6. Creates  ~/Desktop/POS/  and copies everything there
+#  1.  Detects your distro (Debian/Ubuntu · Fedora/RHEL · Arch)
+#  2.  Installs system packages  (Python 3, Node.js 20 LTS, GTK/WebKit2GTK)
+#  3.  Builds the React SPA  (npm ci → npm run build → dist/)
+#  4.  Creates ~/Desktop/POS/ with:
+#          dist/          ← React build served at runtime
+#          data/          ← persistent db.json
+#          app/
+#            merbana_launcher.py
+#            venv/        ← Python venv (--system-site-packages so gi works)
+#          Merbana        ← shell wrapper — double-click this!
+#  5.  Creates a .desktop launcher icon on the Desktop
 #
-#  NOTE: Safe to run as root (sudo) — the output is placed on the real
-#        user's Desktop, not /root/Desktop.
+#  NOTE: Safe to run as root — output lands on the real user's Desktop.
 #
-#  After the script finishes you will find on the Desktop:
-#
-#      ~/Desktop/POS/
-#          Merbana          ← double-click to launch
-#          dist/            ← bundled React build (also inside the binary)
-#          data/            ← persistent app data (db.json)
+#  WHY NO PyInstaller?
+#  gi/WebKit2GTK is a system library (.so + GObject typelibs). PyInstaller
+#  cannot bundle it. The shell-wrapper + venv is the standard Linux approach.
 # =============================================================================
 set -euo pipefail
 
@@ -216,143 +217,119 @@ else
 fi
 success "Node.js $(node --version)  /  npm $(npm --version)"
 
-# ── 5. Python virtual environment ─────────────────────────────────────────────
-info "Setting up Python virtual environment at ${VENV_DIR} …"
-if [[ ! -d "${VENV_DIR}" ]]; then
-    python3 -m venv "${VENV_DIR}"
-fi
-
-# Activate venv for the rest of this script
-# shellcheck disable=SC1091
-source "${VENV_DIR}/bin/activate"
-success "venv activated: $(python --version)"
-
-# ── 6. Python packages ────────────────────────────────────────────────────────
-info "Installing Python packages (pywebview, pyinstaller) …"
-pip install --quiet --upgrade pip
-
-# pywebview 5+ requires WebKit2GTK ≥ 4.1.  On Ubuntu 20.04 (4.0) use 4.x.
-if [[ "${WEBKIT_VER}" == "4.0" ]]; then
-    PYWEBVIEW_SPEC="pywebview>=4.0,<5.0"
-    info "  → WebKit 4.0 detected: pinning pywebview < 5.0 for compatibility"
-else
-    PYWEBVIEW_SPEC="pywebview>=5.0"
-fi
-
-pip install --quiet \
-    "${PYWEBVIEW_SPEC}" \
-    "pyinstaller>=6.0" \
-    "pyinstaller-hooks-contrib>=2024.0"
-success "Python packages installed (pywebview spec: ${PYWEBVIEW_SPEC})."
-
-# ── 7. Node dependencies ──────────────────────────────────────────────────────
+# ── 5. Node dependencies + React build ────────────────────────────────────────
 info "Installing Node.js dependencies …"
 cd "${PROJECT_ROOT}"
 npm ci --silent
 success "Node packages installed."
 
-# ── 8. Build React frontend ────────────────────────────────────────────────────
 info "Building React frontend …"
 npm run build
 [[ -f "${DIST_WEB}/index.html" ]] || die "Frontend build failed: dist/index.html not found."
 success "React build OK."
 
-# ── 9. PyInstaller — compile to single binary ─────────────────────────────────
-info "Compiling launcher with PyInstaller …"
+# ── 6. Create POS directory structure ─────────────────────────────────────────
+APP_DIR="${POS_DIR}/app"
+VENV_APP="${APP_DIR}/venv"
 
-OUT_PYINSTALLER="${PROJECT_ROOT}/dist_linux"
-BUILD_WORK="${PROJECT_ROOT}/_pyinstaller_work"
-SPEC_FILE="${PROJECT_ROOT}/Merbana.spec"
-LAUNCHER="${PROJECT_ROOT}/Deployment/merbana_launcher.py"
+info "Creating ${POS_DIR} structure …"
+mkdir -p "${APP_DIR}"
 
-[[ -f "${LAUNCHER}" ]] || die "merbana_launcher.py not found. Did you run from the project root?"
+# ── 7. Python venv with --system-site-packages ────────────────────────────────
+# gi / WebKit2GTK are SYSTEM libraries — they cannot go inside a venv.
+# --system-site-packages makes the venv inherit them from the system Python,
+# while keeping pywebview isolated inside the venv.
+info "Creating Python venv at ${VENV_APP} …"
+python3 -m venv --system-site-packages --clear "${VENV_APP}"
+success "venv created."
 
-# Clean previous artefacts
-rm -rf "${OUT_PYINSTALLER}" "${BUILD_WORK}" "${SPEC_FILE}"
+source "${VENV_APP}/bin/activate"
 
-# PyInstaller hidden imports — GI namespace depends on webkit version
-if [[ "${WEBKIT_VER}" == "6.0" ]]; then
-    WEBKIT_GI_IMPORT="gi.repository.WebKit"          # WebKitGTK 6 renamed the GI ns
+info "Installing pywebview into venv …"
+"${VENV_APP}/bin/pip" install --quiet --upgrade pip
+
+if [[ "${WEBKIT_VER}" == "4.0" ]]; then
+    PYWEBVIEW_SPEC="pywebview>=4.0,<5.0"
+    info "  → WebKit 4.0: pinning pywebview < 5.0"
 else
-    WEBKIT_GI_IMPORT="gi.repository.WebKit2"         # WebKit2GTK 4.0 / 4.1
+    PYWEBVIEW_SPEC="pywebview>=5.0"
 fi
+"${VENV_APP}/bin/pip" install --quiet "${PYWEBVIEW_SPEC}"
+success "pywebview installed (${PYWEBVIEW_SPEC})."
+deactivate
 
-python -m PyInstaller \
-    --onefile \
-    --noconsole \
-    --add-data "${DIST_WEB}:dist" \
-    --name "Merbana" \
-    --distpath "${OUT_PYINSTALLER}" \
-    --workpath "${BUILD_WORK}" \
-    --specpath "${PROJECT_ROOT}" \
-    --hidden-import "webview" \
-    --hidden-import "webview.http" \
-    --hidden-import "webview.platforms.gtk" \
-    --hidden-import "webview.platforms.qt" \
-    --hidden-import "gi" \
-    --hidden-import "gi.repository.Gtk" \
-    --hidden-import "${WEBKIT_GI_IMPORT}" \
-    "${LAUNCHER}"
-
-BINARY="${OUT_PYINSTALLER}/Merbana"
-[[ -f "${BINARY}" ]] || die "Binary not found after PyInstaller run."
-chmod +x "${BINARY}"
-success "Binary compiled: ${BINARY}"
-
-# ── 10. Assemble ~/Desktop/POS ────────────────────────────────────────────────
-info "Assembling output directory: ${POS_DIR} …"
-
-mkdir -p "${POS_DIR}"
-
-# Copy binary
-cp "${BINARY}" "${POS_DIR}/Merbana"
-chmod +x "${POS_DIR}/Merbana"
-
-# Copy the React dist folder (redundant for runtime, handy for inspection / dev)
+# ── 8. Copy files into POS/ ───────────────────────────────────────────────────
+info "Copying dist/ …"
 rm -rf "${POS_DIR}/dist"
 cp -r "${DIST_WEB}" "${POS_DIR}/dist"
+success "dist/ copied."
 
-# Copy persistent data folder (db.json lives here at runtime)
 DATA_SRC="${PROJECT_ROOT}/public/data"
 if [[ -d "${DATA_SRC}" ]]; then
+    info "Copying data/ …"
     rm -rf "${POS_DIR}/data"
     cp -r "${DATA_SRC}" "${POS_DIR}/data"
+    success "data/ copied."
 fi
 
-success "Output assembled."
+LAUNCHER_SRC="${PROJECT_ROOT}/Deployment/merbana_launcher.py"
+[[ -f "${LAUNCHER_SRC}" ]] || die "merbana_launcher.py not found."
+cp "${LAUNCHER_SRC}" "${APP_DIR}/merbana_launcher.py"
+success "Launcher script copied."
 
-# ── 11. .desktop shortcut for the app launcher ────────────────────────────────
+# ── 9. Shell wrapper: POS/Merbana ─────────────────────────────────────────────
+# This IS what the user runs.  It activates the venv (which can see system
+# gi/WebKit2GTK via --system-site-packages) then launches merbana_launcher.py.
+WRAPPER="${POS_DIR}/Merbana"
+cat > "${WRAPPER}" <<'WRAPPER_EOF'
+#!/usr/bin/env bash
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="${SELF_DIR}/app/venv"
+LAUNCHER="${SELF_DIR}/app/merbana_launcher.py"
+
+if [[ ! -f "${VENV}/bin/python" ]]; then
+    echo "ERROR: venv not found at ${VENV}" >&2
+    exit 1
+fi
+
+export MERBANA_DIST_PATH="${SELF_DIR}/dist"
+exec "${VENV}/bin/python" "${LAUNCHER}"
+WRAPPER_EOF
+chmod +x "${WRAPPER}"
+success "Shell wrapper created: ${WRAPPER}"
+
+# ── 10. .desktop shortcut ─────────────────────────────────────────────────────
 DESKTOP_ENTRY="${REAL_HOME}/Desktop/Merbana.desktop"
+
+ICON=""
+for candidate in \
+    "${POS_DIR}/dist/favicon.ico" \
+    "${POS_DIR}/dist/favicon.png" \
+    "${POS_DIR}/dist/assets/logo.png"; do
+    if [[ -f "${candidate}" ]]; then ICON="${candidate}"; break; fi
+done
+
 cat > "${DESKTOP_ENTRY}" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Merbana - إدارة الطلبات
 Comment=Merbana Order Management System
-Exec=${POS_DIR}/Merbana
-Icon=${POS_DIR}/dist/favicon.ico
+Exec=${WRAPPER}
+Icon=${ICON}
 Terminal=false
 Categories=Office;
 StartupWMClass=Merbana
 EOF
 chmod +x "${DESKTOP_ENTRY}"
-
-# Trust the .desktop file on GNOME (gio) — ignore errors silently
 gio set "${DESKTOP_ENTRY}" metadata::trusted true 2>/dev/null || true
-success "Desktop shortcut created: ${DESKTOP_ENTRY}"
+success "Desktop shortcut: ${DESKTOP_ENTRY}"
 
-# ── 12. Clean up build artefacts ──────────────────────────────────────────────
-info "Cleaning up build artefacts …"
-rm -rf "${OUT_PYINSTALLER}" "${BUILD_WORK}" "${SPEC_FILE}"
-success "Clean."
-
-# ── 13. Fix ownership (running as root → give files back to real user) ─────────
+# ── 11. Fix ownership ─────────────────────────────────────────────────────────
 if [[ "${EUID}" -eq 0 && "${REAL_USER}" != "root" ]]; then
     info "Fixing ownership of ${POS_DIR} → ${REAL_USER} …"
-    chown -R "${REAL_USER}:${REAL_USER}" "${POS_DIR}" 2>/dev/null || \
-    chown -R "${REAL_USER}" "${POS_DIR}"
-    chown "${REAL_USER}:${REAL_USER}" "${DESKTOP_ENTRY}" 2>/dev/null || \
-    chown "${REAL_USER}" "${DESKTOP_ENTRY}"
+    chown -R "${REAL_USER}:${REAL_USER}" "${POS_DIR}" 2>/dev/null || chown -R "${REAL_USER}" "${POS_DIR}"
+    chown "${REAL_USER}:${REAL_USER}" "${DESKTOP_ENTRY}" 2>/dev/null || chown "${REAL_USER}" "${DESKTOP_ENTRY}"
     success "Ownership fixed."
 fi
 
@@ -361,12 +338,13 @@ echo ""
 echo -e "${BOLD}=================================================================${RESET}"
 echo -e "${GREEN}${BOLD}  ✅  Build complete!${RESET}"
 echo ""
-echo -e "  Binary  : ${POS_DIR}/Merbana"
-echo -e "  Dist    : ${POS_DIR}/dist/"
-echo -e "  Data    : ${POS_DIR}/data/"
-echo -e "  Shortcut: ${DESKTOP_ENTRY}"
+echo -e "  POS folder : ${POS_DIR}/"
+echo -e "    Merbana  : run this  (or double-click the Desktop icon)"
+echo -e "    dist/    : React build"
+echo -e "    data/    : persistent data"
+echo -e "    app/     : Python launcher + venv"
 echo ""
-echo -e "  Launch with:   ${POS_DIR}/Merbana"
+echo -e "  Run:  bash ${WRAPPER}"
 echo -e "  Or double-click 'Merbana' on the Desktop."
 echo -e "${BOLD}=================================================================${RESET}"
 echo ""
