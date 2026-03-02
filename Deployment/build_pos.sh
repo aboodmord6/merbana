@@ -260,14 +260,17 @@ info "Installing pywebview into venv …"
 # Remove any previously installed (wrong-version) pywebview to avoid conflicts
 "${VENV_APP}/bin/pip" uninstall -y pywebview 2>/dev/null || true
 
-# Pin to the exact latest release that matches the installed WebKit2GTK:
-#   WebKit2 4.0 → pywebview 4.4.1  (last stable 4.x, uses gi WebKit2 4.0)
-#   WebKit2 4.1 → pywebview 5.x    (requires gi WebKit2 4.1)
-#   WebKitGTK 6.0 → pywebview 5.x  (requires gi WebKit 6.0 / 4.1 compat)
+# Pin to the correct release for the installed WebKit2GTK:
+#   WebKit2 4.0 (Ubuntu 20.04 / Debian 11) → pywebview 3.7.2
+#     pywebview 4.0+ hardcodes gi.require_version('WebKit2', '4.1') in gtk.py
+#     and will crash on systems that only have 4.0. 3.7.2 is the last 3.x
+#     release and uses WebKit2 4.0.
+#   WebKit2 4.1 (Ubuntu 22.04 / Debian 12) → pywebview 5.x
+#   WebKitGTK 6.0 (Ubuntu 24.04 / Debian 13) → pywebview 5.x
 case "${WEBKIT_VER}" in
     4.0)
-        PYWEBVIEW_SPEC="pywebview==4.4.1"
-        info "  → WebKit2 4.0 detected: installing pywebview 4.4.1"
+        PYWEBVIEW_SPEC="pywebview==3.7.2"
+        info "  → WebKit2 4.0 detected: installing pywebview 3.7.2 (last 4.0-compatible release)"
         ;;
     4.1)
         PYWEBVIEW_SPEC="pywebview>=5.0,<6.0"
@@ -278,8 +281,8 @@ case "${WEBKIT_VER}" in
         info "  → WebKitGTK 6.0 detected: installing pywebview 5.x"
         ;;
     *)
-        PYWEBVIEW_SPEC="pywebview>=4.4.1"
-        warn "  → Unknown WebKit version; installing latest pywebview"
+        PYWEBVIEW_SPEC="pywebview==3.7.2"
+        warn "  → Unknown WebKit version; defaulting to pywebview 3.7.2 (safest)"
         ;;
 esac
 

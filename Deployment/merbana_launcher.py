@@ -198,6 +198,12 @@ def main() -> None:
         run_with_webview(dist_path, port)
     except ImportError:
         run_with_browser(dist_path, port)
+    except Exception as exc:
+        # Catches webview.util.WebViewException (no GTK/QT backend found)
+        # and any other runtime failure so the app degrades gracefully.
+        print(f"[merbana] pywebview failed ({exc}), falling back to browser.",
+              file=sys.stderr)
+        run_with_browser(dist_path, port)
 
 
 if __name__ == "__main__":
