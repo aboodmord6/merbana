@@ -105,16 +105,16 @@ info "Installing core system packages (curl, git, Python 3, pip, venv) …"
 case "${PKG_MGR}" in
     apt)
         pkg_install curl git \
-            python3 python3-pip python3-venv python3-dev \
+            python3 python3-pip python3-venv python3-dev python3-tk \
             build-essential
         ;;
     dnf|yum)
         pkg_install curl git \
-            python3 python3-pip python3-devel \
+            python3 python3-pip python3-devel python3-tkinter \
             gcc gcc-c++ make
         ;;
     pacman)
-        pkg_install curl git python python-pip base-devel
+        pkg_install curl git python python-pip tk base-devel
         ;;
 esac
 success "Core packages installed."
@@ -334,6 +334,27 @@ LAUNCHER="${SELF_DIR}/app/merbana_launcher.py"
 if [[ ! -f "${VENV}/bin/python" ]]; then
     echo "ERROR: venv not found at ${VENV}" >&2
     exit 1
+fi
+
+# Ensure GTK/X11 can find the display.
+# When launched from a .desktop file or SSH DISPLAY is often unset.
+if [[ -z "${DISPLAY:-}" ]]; then
+    export DISPLAY=:0
+fi
+
+# Forward XAUTHORITY so GTK can authenticate with the X server.
+if [[ -z "${XAUTHORITY:-}" ]]; then
+    # Try the default location used by LightDM / GDM
+    REAL_USER="$(id -un)"
+    for candidate in \
+        "/run/user/$(id -u)/gdm/Xauthority" \
+        "/home/${REAL_USER}/.Xauthority" \
+        "/tmp/.Xauthority-${REAL_USER}"; do
+        if [[ -f "${candidate}" ]]; then
+            export XAUTHORITY="${candidate}"
+            break
+        fi
+    done
 fi
 
 export MERBANA_DIST_PATH="${SELF_DIR}/dist"

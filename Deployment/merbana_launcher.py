@@ -134,40 +134,60 @@ def run_with_webview(dist_path: str, port: int) -> None:
 
 
 def run_with_browser(dist_path: str, port: int) -> None:
-    """Fallback: open the default browser + a small tkinter control window."""
-    import tkinter as tk
+    """Fallback: open the default browser + a small tkinter control window.
+    Degrades gracefully if tkinter is unavailable (prints URL and blocks)."""
     import webbrowser
 
     httpd = start_server(dist_path, port)
     url = f"http://{HOST}:{port}"
     webbrowser.open(url)
 
-    root = tk.Tk()
-    root.title("Merbana Server")
-    root.geometry("380x180")
-    root.resizable(False, False)
-    root.configure(bg="#1a1a2e")
+    try:
+        import tkinter as tk
 
-    x = (root.winfo_screenwidth() // 2) - 190
-    y = (root.winfo_screenheight() // 2) - 90
-    root.geometry(f"+{x}+{y}")
+        root = tk.Tk()
+        root.title("Merbana Server")
+        root.geometry("380x180")
+        root.resizable(False, False)
+        root.configure(bg="#1a1a2e")
 
-    tk.Label(root, text="Merbana", font=("Segoe UI", 18, "bold"),
-             fg="#e94560", bg="#1a1a2e").pack(pady=(20, 4))
-    tk.Label(root, text=f"Running on port {port}",
-             font=("Segoe UI", 9), fg="#a0a0b0", bg="#1a1a2e").pack()
-    tk.Label(root, text="Close this window to stop.",
-             font=("Segoe UI", 9), fg="#707080", bg="#1a1a2e").pack(pady=(4, 12))
-    tk.Button(root, text="Open in Browser", bg="#e94560", fg="white",
-              relief="flat", cursor="hand2", padx=12, pady=4,
-              command=lambda: webbrowser.open(url)).pack()
+        x = (root.winfo_screenwidth() // 2) - 190
+        y = (root.winfo_screenheight() // 2) - 90
+        root.geometry(f"+{x}+{y}")
 
-    def on_close():
-        httpd.shutdown()
-        root.destroy()
+        tk.Label(root, text="Merbana", font=("Segoe UI", 18, "bold"),
+                 fg="#e94560", bg="#1a1a2e").pack(pady=(20, 4))
+        tk.Label(root, text=f"Running on port {port}",
+                 font=("Segoe UI", 9), fg="#a0a0b0", bg="#1a1a2e").pack()
+        tk.Label(root, text="Close this window to stop.",
+                 font=("Segoe UI", 9), fg="#707080", bg="#1a1a2e").pack(pady=(4, 12))
+        tk.Button(root, text="Open in Browser", bg="#e94560", fg="white",
+                  relief="flat", cursor="hand2", padx=12, pady=4,
+                  command=lambda: webbrowser.open(url)).pack()
 
-    root.protocol("WM_DELETE_WINDOW", on_close)
-    root.mainloop()
+        def on_close():
+            httpd.shutdown()
+            root.destroy()
+
+        root.protocol("WM_DELETE_WINDOW", on_close)
+        root.mainloop()
+
+    except (ImportError, Exception) as exc:
+        # tkinter not installed, or cannot connect to a display.
+        # Keep the server running until Ctrl-C.
+        if not isinstance(exc, ImportError):
+            print(f"[merbana] tkinter unavailable ({exc}), running headless.",
+                  file=sys.stderr)
+        print(f"\n  Merbana is running at: {url}")
+        print("  Open the URL above in your browser.")
+        print("  Press Ctrl-C to stop.\n")
+        try:
+            import signal
+            signal.pause()   # block until any signal (Ctrl-C sends SIGINT)
+        except (AttributeError, KeyboardInterrupt):
+            pass
+        finally:
+            httpd.shutdown()
 
 
 # ── Entry point ──────────────────────────────────────────────
