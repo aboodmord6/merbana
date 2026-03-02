@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDatabase } from '../hooks/useDatabase';
 import { addUser, deleteUser, updateUser, updateSettings } from '../services/database';
 import { formatDateTime } from '../utils/formatters';
@@ -34,8 +34,13 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'log' | 'settings'>('users');
 
   // Settings state
-  const [companyName, setCompanyName] = useState(settings?.companyName || '');
+  const [companyName, setCompanyName] = useState(settings?.companyName ?? '');
   const [saveMessage, setSaveMessage] = useState('');
+
+  // Re-sync companyName when DB finishes loading (settings starts as default before db.json loads)
+  useEffect(() => {
+    setCompanyName(settings?.companyName ?? '');
+  }, [settings]);
 
   function handleSaveSettings(e: React.FormEvent) {
     e.preventDefault();

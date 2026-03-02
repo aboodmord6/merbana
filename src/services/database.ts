@@ -9,10 +9,16 @@ let db: Database = { products: [], categories: [], orders: [], register: { ...de
 let listeners: Listener[] = [];
 
 const STORAGE_KEY = 'merbana_db';
+// Bump this string whenever the db.json seed changes or a migration is needed.
+// Any client whose stored version differs will have localStorage cleared and
+// will re-seed from the latest db.json automatically.
+const DB_VERSION = '2';
+const VERSION_KEY = 'merbana_db_version';
 
 function notify() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    localStorage.setItem(VERSION_KEY, DB_VERSION);
   } catch (err) {
     console.error('Failed to save to localStorage:', err);
   }
@@ -33,6 +39,15 @@ let loadPromise: Promise<Database> | null = null;
 export function loadDatabase(): Promise<Database> {
   if (loaded) return Promise.resolve(db);
   if (loadPromise) return loadPromise;
+
+  // ── Version check: if the stored version doesn't match DB_VERSION,
+  // wipe localStorage so the app re-seeds cleanly from db.json.
+  const storedVersion = localStorage.getItem(VERSION_KEY);
+  if (storedVersion !== DB_VERSION) {
+    console.info(`[merbana] DB version changed (${storedVersion ?? 'none'} → ${DB_VERSION}). Clearing cache.`);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(VERSION_KEY, DB_VERSION);
+  }
 
   // 1. Try to load from LocalStorage first
   const cached = localStorage.getItem(STORAGE_KEY);
@@ -461,6 +476,9 @@ export function importDatabase(file: File): Promise<{ success: boolean; error?: 
           settings: data.settings || { ...defaultSettings },
           debtors: data.debtors || [],
         };
+        loaded = true;         // prevent a racing loadDatabase() from overwriting the import
+        loadPromise = null;
+        checkDailyReset();
         notify();
         resolve({ success: true });
       } catch {
@@ -508,6 +526,8 @@ window.injectDatabase = async (jsonString: string) => {
     };
 
     loaded = true;
+    loadPromise = null;
+    checkDailyReset();
     notify(); // Trigger UI updates
     return { success: true };
   } catch (err) {
