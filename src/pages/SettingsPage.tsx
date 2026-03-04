@@ -68,13 +68,13 @@ export default function SettingsPage() {
             <div className="flex-1">
               <h2 className="font-semibold text-gray-900 mb-1">تصدير قاعدة البيانات</h2>
               <p className="text-sm text-gray-500 mb-4">
-                تنزيل قاعدة البيانات الحالية كملف JSON. استخدمها كنسخة احتياطية أو لنقل البيانات.
+                تنزيل قاعدة البيانات الحالية كملف SQLite. استخدمها كنسخة احتياطية أو لنقل البيانات.
               </p>
               <button
                 onClick={handleExport}
                 className="px-4 py-2.5 text-sm font-medium text-white bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors"
               >
-                تنزيل db.json
+                تنزيل merbana.db
               </button>
             </div>
           </div>
@@ -89,7 +89,7 @@ export default function SettingsPage() {
             <div className="flex-1">
               <h2 className="font-semibold text-gray-900 mb-1">استيراد قاعدة البيانات</h2>
               <p className="text-sm text-gray-500 mb-4">
-                رفع ملف JSON لاستبدال قاعدة البيانات الحالية. يجب أن يحتوي الملف على <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">products</code> و <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">orders</code>.
+                رفع ملف <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">.db</code> لاستعادة قاعدة البيانات من نسخة احتياطية.
               </p>
               <label className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl cursor-pointer transition-colors ${
                 importing

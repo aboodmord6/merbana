@@ -12,6 +12,10 @@ export default defineConfig({
       },
     }),
   ],
+  // Prevent Vite from pre-bundling sql.js — its WASM loader breaks under dep optimisation
+  optimizeDeps: {
+    exclude: ['sql.js'],
+  },
   test: {
     globals: true,
     environment: 'node',

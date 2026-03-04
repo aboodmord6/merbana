@@ -1,9 +1,9 @@
-/**
- * Unit tests for src/services/database.ts
+﻿/**
+ * Unit tests for src/services/database.ts (sql.js / SQLite backend).
  *
  * Each describe block resets the module so every test starts with a clean,
- * empty in-memory database.  Browser globals (navigator.sendBeacon, fetch,
- * Blob) are stubbed so the tests run in plain Node without a browser.
+ * empty in-memory SQLite database.  Browser globals (navigator.sendBeacon,
+ * fetch, Blob) are stubbed so the tests run in plain Node without a browser.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -11,35 +11,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 /*  Browser API stubs                                                  */
 /* ------------------------------------------------------------------ */
 
-// window — stub before module import (database.ts assigns window.injectDatabase at load)
+// window  stub before module import (database.ts assigns window.injectDatabase
+// and window.addEventListener at load)
 if (typeof globalThis.window === 'undefined') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).window = globalThis;
 }
-// Ensure addEventListener exists for the beforeunload flush hook
 if (typeof globalThis.window.addEventListener !== 'function') {
   globalThis.window.addEventListener = vi.fn();
 }
 
-// sendBeacon – always returns true (queued) so notify() never falls back to fetch
+// sendBeacon  always returns true so notify() never falls back to fetch
 const sendBeaconMock = vi.fn(() => true);
 vi.stubGlobal('navigator', { sendBeacon: sendBeaconMock });
 
-// Blob – minimal stub (just stores the data for assertions)
+// Blob  minimal stub
 vi.stubGlobal(
   'Blob',
   class Blob {
-    parts: unknown[];
-    options: unknown;
+    parts: unknown[]; options: unknown;
     constructor(parts: unknown[], options?: unknown) {
-      this.parts = parts;
-      this.options = options;
+      this.parts = parts; this.options = options;
     }
   },
 );
 
-// fetch – should not be reached if sendBeacon succeeds, but stub it anyway
-vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true })));
+// fetch  return 404 for /data/ paths so loadDatabase() starts with an empty DB.
+// Persist calls go to /api/save-db (via fetch fallback since SQLite DB > 64 KB).
+const fetchMock = vi.fn(async (url: string) => {
+  if (typeof url === 'string' && url.includes('/data/')) {
+    return { ok: false, status: 404 };
+  }
+  return { ok: true };
+});
+vi.stubGlobal('fetch', fetchMock);
 
 /* ------------------------------------------------------------------ */
 /*  Module-level helper                                                */
@@ -47,9 +52,15 @@ vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true })));
 
 type DB = typeof import('./database');
 
+/**
+ * Create a fresh database module instance with an empty in-memory SQLite DB.
+ * loadDatabase() is called so sqlDb is initialised before any test function.
+ */
 async function freshDb(): Promise<DB> {
   vi.resetModules();
-  return (await import('./database')) as DB;
+  const m = (await import('./database')) as DB;
+  await m.loadDatabase();
+  return m;
 }
 
 /* ================================================================== */
@@ -256,7 +267,7 @@ describe('Stock Management', () => {
     const products = db.getProducts();
     expect(products[0].stock).toBe(0);
     expect(products[1].stock).toBe(0);
-    expect(products[2].stock).toBe(10); // untracked — unchanged
+    expect(products[2].stock).toBe(10); // untracked  unchanged
   });
 });
 
@@ -351,7 +362,6 @@ describe('Orders', () => {
   });
 
   it('addOrder wraps order number after 100', () => {
-    // Seed 100 orders
     for (let i = 0; i < 100; i++) db.addOrder(sampleItems);
     const o101 = db.addOrder(sampleItems);
     expect(o101.orderNumber).toBe(1); // wrapped
@@ -528,15 +538,25 @@ describe('Debtors', () => {
 });
 
 /* ================================================================== */
-/*  Subscription                                                       */
+/*  Subscription / debounced persist                                   */
 /* ================================================================== */
 
 describe('subscribe / notify', () => {
   let db: DB;
 
+  /** Count only the save-db fetch calls (ignore /data/ fetches from loadDatabase). */
+  function saveFetchCount() {
+    return fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('/api/save-db')).length;
+  }
+
   beforeEach(async () => {
     sendBeaconMock.mockClear();
+    fetchMock.mockClear();
     db = await freshDb();
+    // Flush the save triggered by loadDatabase() init so mock starts clean.
+    db.flushSave();
+    fetchMock.mockClear();
+    sendBeaconMock.mockClear();
   });
 
   it('listener is called on mutations', () => {
@@ -556,29 +576,22 @@ describe('subscribe / notify', () => {
     expect(listener).toHaveBeenCalledTimes(1); // no extra call
   });
 
-  it('notify persists via sendBeacon after debounce', () => {
-    vi.useFakeTimers();
-    sendBeaconMock.mockClear();
+  it('flushSave persists to /api/save-db', () => {
     db.addUser('Persist Test');
-    // sendBeacon is debounced — hasn't fired yet
-    expect(sendBeaconMock).not.toHaveBeenCalled();
-    // Advance past the debounce window (100 ms)
-    vi.advanceTimersByTime(150);
-    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
-    expect(sendBeaconMock).toHaveBeenCalledWith('/api/save-db', expect.anything());
-    vi.useRealTimers();
+    // Persistence is debounced — no immediate save
+    expect(saveFetchCount()).toBe(0);
+    // Flush synchronously
+    db.flushSave();
+    expect(saveFetchCount()).toBe(1);
   });
 
-  it('debounce batches rapid mutations into one save', () => {
-    vi.useFakeTimers();
-    sendBeaconMock.mockClear();
+  it('flushSave batches rapid mutations into one save', () => {
     db.addUser('A');
     db.addUser('B');
     db.addUser('C');
-    vi.advanceTimersByTime(150);
+    db.flushSave();
     // Only one save despite three mutations
-    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
+    expect(saveFetchCount()).toBe(1);
   });
 });
 

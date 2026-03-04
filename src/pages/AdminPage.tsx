@@ -38,7 +38,7 @@ export default function AdminPage() {
   const [companyName, setCompanyName] = useState(settings?.companyName ?? '');
   const [saveMessage, setSaveMessage] = useState('');
 
-  // Re-sync companyName when DB finishes loading (settings starts as default before db.json loads)
+  // Re-sync companyName when DB finishes loading
   useEffect(() => {
     setCompanyName(settings?.companyName ?? '');
   }, [settings]);
