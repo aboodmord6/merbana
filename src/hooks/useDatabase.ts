@@ -2,6 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { subscribe, loadDatabase, getProducts, getCategories, getOrders, getRegister, getUsers, getActivityLog, getSettings, getDebtors } from '../services/database';
 import type { Product, Category, Order, RegisterState, StoreUser, ActivityLog, StoreSettings, Debtor } from '../types/types';
 
+const defaultSettings: StoreSettings = {
+  companyName: '',
+  printerSettings: {
+    defaultPrinter: '',
+    kitchenPrinter: '',
+    defaultOptions: {},
+    printBehavior: 'customer_only',
+    autoPrint: false,
+    customerCopies: 1,
+    kitchenCopies: 1,
+  },
+};
+
 export function useDatabase() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -9,7 +22,7 @@ export function useDatabase() {
   const [register, setRegister] = useState<RegisterState>({ currentBalance: 0, transactions: [] });
   const [users, setUsers] = useState<StoreUser[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
-  const [settings, setSettings] = useState<StoreSettings>({ companyName: '' });
+  const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
   const [debtors, setDebtors] = useState<Debtor[]>([]);
   const [loading, setLoading] = useState(true);
 

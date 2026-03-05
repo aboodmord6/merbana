@@ -3,7 +3,18 @@ import type { Database, Product, Category, Order, CashTransaction, RegisterState
 
 type Listener = () => void;
 
-const defaultSettings: StoreSettings = { companyName: '' };
+const defaultSettings: StoreSettings = {
+  companyName: '',
+  printerSettings: {
+    defaultPrinter: '',
+    kitchenPrinter: '',
+    defaultOptions: {},
+    printBehavior: 'customer_only',
+    autoPrint: false,
+    customerCopies: 1,
+    kitchenCopies: 1,
+  },
+};
 let db: Database = {
   products: [], categories: [], orders: [],
   register: { currentBalance: 0, transactions: [] },
@@ -76,7 +87,18 @@ export function loadDatabase(): Promise<Database> {
         register:    data.register  || { currentBalance: 0, transactions: [] },
         users:       Array.isArray(data.users)       ? data.users       : [],
         activityLog: Array.isArray(data.activityLog) ? data.activityLog : [],
-        settings:    data.settings  || { ...defaultSettings },
+        settings: {
+          ...defaultSettings,
+          ...(data.settings || {}),
+          printerSettings: {
+            ...defaultSettings.printerSettings,
+            ...(data.settings?.printerSettings || {}),
+            defaultOptions: {
+              ...defaultSettings.printerSettings.defaultOptions,
+              ...(data.settings?.printerSettings?.defaultOptions || {}),
+            },
+          },
+        },
         debtors:     Array.isArray(data.debtors)     ? data.debtors     : [],
         lastStockReset: data.lastStockReset || '',
       };
@@ -236,7 +258,18 @@ export function getSettings(): StoreSettings {
 }
 
 export function updateSettings(settings: Partial<StoreSettings>) {
-  db.settings = { ...db.settings, ...settings };
+  db.settings = {
+    ...db.settings,
+    ...settings,
+    printerSettings: {
+      ...db.settings.printerSettings,
+      ...(settings.printerSettings || {}),
+      defaultOptions: {
+        ...db.settings.printerSettings.defaultOptions,
+        ...(settings.printerSettings?.defaultOptions || {}),
+      },
+    },
+  };
   notify();
 }
 

@@ -104,9 +104,40 @@
 }
 
 /* ── Print Styles ────────────────────────────────────── */
+@page {
+  size: 80mm auto; /* width fixed to 80mm, height expands with content */
+  margin: 0;
+}
+
 @media print {
-  body {
+  html, body {
     background: white !important;
+    width: 80mm;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0;
+    padding: 0;
+    overflow: visible !important;
+  }
+
+  /* Receipt wrapper — shrink to content, never full viewport */
+  .receipt-print-root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+
+  /* Kill all layout wrappers that force full-page height */
+  * {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
   }
 
   .print\:hidden {

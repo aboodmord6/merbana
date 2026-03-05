@@ -24,6 +24,7 @@ export default function Sidebar() {
   ];
 
   return (
+    <div className="print:hidden">
     <>
       {/* Mobile hamburger */}
       <button
@@ -114,5 +115,6 @@ export default function Sidebar() {
         </div>
       </aside>
     </>
+    </div>
   );
 }
