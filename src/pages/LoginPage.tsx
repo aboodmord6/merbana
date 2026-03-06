@@ -67,7 +67,7 @@ export default function LoginPage() {
       {/* Header */}
       <div className="relative text-center mb-10 animate-fade-in">
         <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-violet-600 to-amber-500 bg-clip-text text-transparent mb-2">
-          {settings.companyName}
+          {settings.companyName} hi new update
         </h1>
         <p className="text-stone-500 text-lg">{greeting}</p>
       </div>
