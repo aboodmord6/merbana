@@ -18,3 +18,4 @@ zstandard==0.25.0
 PyQt5
 PyQtWebEngine
 qtpy
+pycups
