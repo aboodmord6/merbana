@@ -7,14 +7,16 @@ desktop window via pywebview (falls back to the system browser).
 
 import http.server
 import json
+import logging
 import os
+import shutil
 import socket
 import socketserver
+import subprocess
 import sys
-import tempfile
 import threading
 import webbrowser
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 PORT          = 8741
@@ -25,6 +27,43 @@ WINDOW_HEIGHT = 820
 
 # Set by run_with_webview / run_with_browser before the server starts
 _data_path: str = ""
+_log_path: str = ""
+
+
+def _setup_logging(log_path: str) -> None:
+    """Configure logging to file + stderr."""
+    global _log_path
+    _log_path = log_path
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_path, mode="a", encoding="utf-8"),
+            logging.StreamHandler(sys.stderr),
+        ],
+    )
+    logging.info("Merbana launcher started. Log: %s", log_path)
+
+
+def _open_log_terminal() -> None:
+    """Open a terminal window that tails the log file (Linux only)."""
+    if not _log_path:
+        return
+    candidates = [
+        ("xterm",          ["xterm", "-title", "Merbana — Log", "-e", f"tail -f '{_log_path}'; read"]),
+        ("gnome-terminal", ["gnome-terminal", "--title=Merbana — Log", "--", "bash", "-c", f"tail -f '{_log_path}'; read"]),
+        ("konsole",        ["konsole", "--title", "Merbana — Log", "-e", "bash", "-c", f"tail -f '{_log_path}'; read"]),
+        ("xfce4-terminal", ["xfce4-terminal", "--title=Merbana — Log", "-e", f"tail -f '{_log_path}'; read"]),
+        ("lxterminal",     ["lxterminal", "--title=Merbana — Log", "-e", f"tail -f '{_log_path}'; read"]),
+    ]
+    for bin_name, cmd in candidates:
+        if shutil.which(bin_name):
+            try:
+                subprocess.Popen(cmd)
+            except Exception as exc:
+                logging.warning("Could not open log terminal (%s): %s", bin_name, exc)
+            return
 
 
 def _json_response(handler: http.server.BaseHTTPRequestHandler, status: int, payload: dict) -> None:
@@ -34,102 +73,6 @@ def _json_response(handler: http.server.BaseHTTPRequestHandler, status: int, pay
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
     handler.wfile.write(data)
-
-
-def _get_cups_connection():
-    """Return a pycups connection, or raise RuntimeError with a readable reason."""
-    try:
-        import cups
-    except Exception as exc:
-        raise RuntimeError(f"pycups unavailable: {exc}")
-
-    try:
-        return cups.Connection(), cups
-    except Exception as exc:
-        raise RuntimeError(f"CUPS connection failed: {exc}")
-
-
-def _get_printer_options(conn, cups, printer_name: str):
-    """Return normalized CUPS options for a given printer."""
-    options = []
-    ppd_path = ""
-
-    try:
-        ppd_path = conn.getPPD(printer_name)
-        ppd = cups.PPD(ppd_path)
-        ppd.markDefaults()
-
-        for group in getattr(ppd, "optionGroups", []):
-            group_name = getattr(group, "text", "General")
-            for opt in getattr(group, "options", []):
-                name = getattr(opt, "keyword", "") or getattr(opt, "text", "")
-                if not name:
-                    continue
-
-                choices = []
-                default_value = getattr(opt, "defchoice", "") or ""
-                for ch in getattr(opt, "choices", []):
-                    if isinstance(ch, dict):
-                        value = str(ch.get("choice", ""))
-                        text = str(ch.get("text", value))
-                        if ch.get("marked"):
-                            default_value = value
-                    else:
-                        value = str(ch)
-                        text = value
-                    if value:
-                        choices.append({"value": value, "label": text})
-
-                if default_value and not any(c["value"] == default_value for c in choices):
-                    choices.insert(0, {"value": default_value, "label": default_value})
-
-                if choices:
-                    options.append({
-                        "name": str(name),
-                        "label": str(getattr(opt, "text", name)),
-                        "group": str(group_name),
-                        "default": str(default_value),
-                        "choices": choices,
-                        "source": "ppd",
-                    })
-    except Exception:
-        # PPD parsing can fail on some drivers; attribute fallback below still works.
-        pass
-    finally:
-        if ppd_path and os.path.isfile(ppd_path):
-            try:
-                os.unlink(ppd_path)
-            except OSError:
-                pass
-
-    if options:
-        return options
-
-    # Fallback to printer attributes if PPD options are unavailable.
-    attrs = conn.getPrinterAttributes(printer_name)
-    for key, value in attrs.items():
-        if not key.endswith("-supported"):
-            continue
-        if not isinstance(value, (list, tuple)) or not value:
-            continue
-        # Avoid huge unsupported lists from cluttering UI.
-        if len(value) > 50:
-            continue
-
-        name = key[: -len("-supported")]
-        choices = [{"value": str(v), "label": str(v)} for v in value]
-        default_value = attrs.get(f"{name}-default", "")
-
-        options.append({
-            "name": name,
-            "label": name,
-            "group": "attributes",
-            "default": str(default_value),
-            "choices": choices,
-            "source": "attributes",
-        })
-
-    return options
 
 
 def get_data_path(dist_path: str) -> str:
@@ -169,70 +112,7 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        query = parse_qs(parsed.query)
         path = parsed.path
-
-        if path == "/api/printers":
-            try:
-                conn, _ = _get_cups_connection()
-                printers_raw = conn.getPrinters()
-                default_printer = conn.getDefault()
-                printers = []
-
-                for name, attrs in printers_raw.items():
-                    printers.append({
-                        "name": name,
-                        "info": attrs.get("printer-info", ""),
-                        "location": attrs.get("printer-location", ""),
-                        "state": attrs.get("printer-state", 0),
-                        "isDefault": name == default_printer,
-                    })
-
-                _json_response(self, 200, {"ok": True, "printers": printers})
-            except RuntimeError as exc:
-                _json_response(self, 200, {"ok": False, "printers": [], "error": str(exc)})
-            except Exception as exc:
-                _json_response(self, 500, {"ok": False, "printers": [], "error": str(exc)})
-            return
-
-        if path == "/api/printer-options":
-            try:
-                conn, cups = _get_cups_connection()
-                printer_name = (query.get("printer", [""])[0] or "").strip()
-
-                printers = conn.getPrinters()
-                if not printer_name:
-                    printer_name = conn.getDefault() or ""
-                if not printer_name or printer_name not in printers:
-                    _json_response(self, 400, {
-                        "ok": False,
-                        "printer": printer_name,
-                        "options": [],
-                        "error": "Invalid printer name",
-                    })
-                    return
-
-                options = _get_printer_options(conn, cups, printer_name)
-                _json_response(self, 200, {
-                    "ok": True,
-                    "printer": printer_name,
-                    "options": options,
-                })
-            except RuntimeError as exc:
-                _json_response(self, 200, {
-                    "ok": False,
-                    "printer": "",
-                    "options": [],
-                    "error": str(exc),
-                })
-            except Exception as exc:
-                _json_response(self, 500, {
-                    "ok": False,
-                    "printer": "",
-                    "options": [],
-                    "error": str(exc),
-                })
-            return
 
         # /data/db.json is stored beside the exe / launcher, NOT inside dist/.
         # Serve it directly so reads always hit the real persistent file.
@@ -285,59 +165,6 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                 _json_response(self, 200, {"ok": True})
             except Exception as exc:
                 _json_response(self, 500, {"ok": False, "error": str(exc)})
-            return
-
-        if path == "/api/print":
-            try:
-                conn, _ = _get_cups_connection()
-                body_bytes = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-                payload = json.loads(body_bytes.decode("utf-8") or "{}")
-
-                printer = str(payload.get("printer") or "").strip()
-                copies = int(payload.get("copies") or 1)
-                title = str(payload.get("title") or "Merbana Receipt")
-                html_docs = payload.get("htmlDocs")
-                html = payload.get("html")
-                raw_options = payload.get("options") or {}
-
-                if not isinstance(raw_options, dict):
-                    raw_options = {}
-                options = {str(k): str(v) for k, v in raw_options.items() if str(k).strip()}
-                options["copies"] = str(max(1, copies))
-
-                printers = conn.getPrinters()
-                if not printer:
-                    printer = conn.getDefault() or ""
-                if not printer or printer not in printers:
-                    raise ValueError("Invalid printer name")
-
-                docs = []
-                if isinstance(html_docs, list):
-                    docs = [str(doc) for doc in html_docs if isinstance(doc, str) and doc.strip()]
-                elif isinstance(html, str) and html.strip():
-                    docs = [html]
-
-                if not docs:
-                    raise ValueError("No printable HTML provided")
-
-                job_ids = []
-                for idx, doc in enumerate(docs, start=1):
-                    tmp_path = ""
-                    try:
-                        with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
-                            f.write(doc)
-                            tmp_path = f.name
-                        job_id = conn.printFile(printer, tmp_path, f"{title} #{idx}", options)
-                        job_ids.append(job_id)
-                    finally:
-                        if tmp_path and os.path.isfile(tmp_path):
-                            os.unlink(tmp_path)
-
-                _json_response(self, 200, {"ok": True, "jobIds": job_ids})
-            except RuntimeError as exc:
-                _json_response(self, 200, {"ok": False, "error": str(exc)})
-            except Exception as exc:
-                _json_response(self, 400, {"ok": False, "error": str(exc)})
             return
 
         self.send_response(404)
@@ -420,7 +247,13 @@ def run_with_browser(dist_path: str, port: int) -> None:
 def main() -> None:
     dist_path = get_dist_path()
 
+    # Set up log file beside the data folder.
+    log_dir = os.path.dirname(get_data_path(dist_path))
+    _setup_logging(os.path.join(log_dir, "merbana.log"))
+    _open_log_terminal()
+
     if not os.path.isfile(os.path.join(dist_path, "index.html")):
+        logging.error("dist/ folder not found. Expected: %s", dist_path)
         try:
             import tkinter as tk
             from tkinter import messagebox
@@ -428,17 +261,17 @@ def main() -> None:
             messagebox.showerror("Merbana — Error",
                                  f"dist/ folder not found.\n\nExpected:\n{dist_path}")
         except Exception:
-            print(f"ERROR: dist/ not found at {dist_path}", file=sys.stderr)
+            pass
         sys.exit(1)
 
     port = find_free_port(PORT)
+    logging.info("Starting server on %s:%d", HOST, port)
 
     try:
         import webview  # noqa: F401
         run_with_webview(dist_path, port)
     except Exception as exc:
-        print(f"[merbana] pywebview unavailable ({exc}), opening in browser.",
-              file=sys.stderr)
+        logging.warning("pywebview unavailable (%s), opening in browser.", exc)
         run_with_browser(dist_path, port)
 
 

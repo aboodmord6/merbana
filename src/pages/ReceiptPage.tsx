@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDatabase } from '../hooks/useDatabase';
 import { formatCurrency, formatDateTime } from '../utils/formatters';
@@ -7,9 +7,6 @@ export default function ReceiptPage() {
   const { id } = useParams<{ id: string }>();
   const { orders, settings, loading } = useDatabase();
   const receiptRef = useRef<HTMLDivElement>(null);
-  const autoPrintedRef = useRef(false);
-  const [printing, setPrinting] = useState(false);
-  const [printMessage, setPrintMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const order = orders.find((o) => o.id === id);
 
@@ -19,143 +16,6 @@ export default function ReceiptPage() {
   const prevOrder = currentIdx < sorted.length - 1 ? sorted[currentIdx + 1] : null;
   const nextOrder = currentIdx > 0 ? sorted[currentIdx - 1] : null;
 
-  function wrapPrintableHtml(content: string, title: string) {
-    return `<!doctype html>
-<html lang="ar" dir="rtl">
-  <head>
-    <meta charset="utf-8" />
-    <title>${title}</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 0; color: #000; }
-      .receipt { width: 72mm; margin: 0 auto; padding: 8px; }
-      .heading { text-align: center; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { font-size: 12px; padding: 3px 0; text-align: right; }
-      .total { margin-top: 8px; font-size: 14px; font-weight: 700; }
-      .muted { font-size: 11px; color: #333; }
-    </style>
-  </head>
-  <body>
-    <div class="receipt">${content}</div>
-  </body>
-</html>`;
-  }
-
-  function buildKitchenHtml() {
-    if (!order) return '';
-    const rows = order.items
-      .map((item) => `<tr><td>${item.name}${item.size ? ` (${item.size})` : ''}</td><td style="text-align:center">x${item.quantity}</td></tr>`)
-      .join('');
-
-    return wrapPrintableHtml(
-      `
-      <div class="heading">نسخة المطبخ</div>
-      <div class="muted">طلب #${String(order.orderNumber ?? '').padStart(3, '0')}</div>
-      <div class="muted">${formatDateTime(order.date)}</div>
-      <table>
-        <thead><tr><th>الصنف</th><th style="text-align:center">الكمية</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      ${order.note ? `<div class="muted" style="margin-top:8px"><strong>ملاحظة:</strong> ${order.note}</div>` : ''}
-      `,
-      `Kitchen Receipt #${order.orderNumber}`,
-    );
-  }
-
-  function buildCustomerHtml() {
-    const receiptEl = receiptRef.current;
-    if (!receiptEl) return '';
-    return wrapPrintableHtml(receiptEl.innerHTML, `Customer Receipt #${order?.orderNumber ?? ''}`);
-  }
-
-  async function sendPrintJob(params: {
-    printer: string;
-    copies: number;
-    htmlDocs: string[];
-    title: string;
-  }) {
-    const response = await fetch('/api/print', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        printer: params.printer,
-        copies: params.copies,
-        htmlDocs: params.htmlDocs,
-        options: settings.printerSettings.defaultOptions,
-        title: params.title,
-      }),
-    });
-
-    const result = await response.json();
-    if (!result.ok) {
-      throw new Error(result.error || 'فشل إرسال الطباعة');
-    }
-  }
-
-  async function handleDirectPrint() {
-    if (!order) return;
-
-    const printerSettings = settings.printerSettings;
-    if (!printerSettings.defaultPrinter) {
-      setPrintMessage({ type: 'error', text: 'لم يتم اختيار طابعة افتراضية من صفحة الإعدادات.' });
-      return;
-    }
-
-    setPrinting(true);
-    setPrintMessage(null);
-
-    try {
-      const customerHtml = buildCustomerHtml();
-      const kitchenHtml = buildKitchenHtml();
-      const kitchenPrinter = printerSettings.kitchenPrinter || printerSettings.defaultPrinter;
-
-      if (printerSettings.printBehavior === 'customer_only') {
-        await sendPrintJob({
-          printer: printerSettings.defaultPrinter,
-          copies: printerSettings.customerCopies,
-          htmlDocs: [customerHtml],
-          title: `Customer Receipt #${order.orderNumber}`,
-        });
-      } else if (printerSettings.printBehavior === 'kitchen_only') {
-        await sendPrintJob({
-          printer: kitchenPrinter,
-          copies: printerSettings.kitchenCopies,
-          htmlDocs: [kitchenHtml],
-          title: `Kitchen Receipt #${order.orderNumber}`,
-        });
-      } else {
-        await sendPrintJob({
-          printer: printerSettings.defaultPrinter,
-          copies: printerSettings.customerCopies,
-          htmlDocs: [customerHtml],
-          title: `Customer Receipt #${order.orderNumber}`,
-        });
-        await sendPrintJob({
-          printer: kitchenPrinter,
-          copies: printerSettings.kitchenCopies,
-          htmlDocs: [kitchenHtml],
-          title: `Kitchen Receipt #${order.orderNumber}`,
-        });
-      }
-
-      setPrintMessage({ type: 'success', text: 'تم إرسال مهمة الطباعة إلى CUPS بنجاح.' });
-    } catch (error) {
-      setPrintMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'فشل الطباعة المباشرة. يمكنك استخدام طباعة المتصفح.',
-      });
-    } finally {
-      setPrinting(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!order || autoPrintedRef.current) return;
-    if (settings.printerSettings.autoPrint) {
-      autoPrintedRef.current = true;
-      void handleDirectPrint();
-    }
-  }, [order, settings.printerSettings.autoPrint]);
 
   if (loading) {
     return (
@@ -189,30 +49,12 @@ export default function ReceiptPage() {
             الطلبات
           </Link>
           <button
-            onClick={handleDirectPrint}
-            disabled={printing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors disabled:opacity-50"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2z" />
-            </svg>
-            {printing ? 'جاري الإرسال...' : 'طباعة مباشرة'}
-          </button>
-          <button
             onClick={() => window.print()}
             className="inline-flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
           >
             طباعة المتصفح
           </button>
         </div>
-
-        {printMessage && (
-          <div className={`mb-3 text-xs px-3 py-2 rounded-lg print:hidden ${
-            printMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-          }`}>
-            {printMessage.text}
-          </div>
-        )}
 
         {/* Prev / Next order navigation */}
         <div className="flex items-center justify-between mb-3 print:hidden">

@@ -12,15 +12,6 @@ type Listener = () => void;
 
 const defaultSettings: StoreSettings = {
   companyName: '',
-  printerSettings: {
-    defaultPrinter: '',
-    kitchenPrinter: '',
-    defaultOptions: {},
-    printBehavior: 'customer_only',
-    autoPrint: false,
-    customerCopies: 1,
-    kitchenCopies: 1,
-  },
   security: {
     passwordRequiredFor: { ...DEFAULT_PASSWORD_REQUIREMENTS },
   },
@@ -30,19 +21,6 @@ function mergeSettings(partial?: DeepPartial<StoreSettings>): StoreSettings {
   return {
     ...defaultSettings,
     ...(partial || {}),
-    printerSettings: {
-      ...defaultSettings.printerSettings,
-      ...(partial?.printerSettings || {}),
-      defaultOptions: (() => {
-        const merged = {
-          ...defaultSettings.printerSettings.defaultOptions,
-          ...(partial?.printerSettings?.defaultOptions || {}),
-        };
-        return Object.fromEntries(
-          Object.entries(merged).filter(([, value]) => typeof value === 'string'),
-        ) as Record<string, string>;
-      })(),
-    },
     security: {
       ...defaultSettings.security,
       ...(partial?.security || {}),

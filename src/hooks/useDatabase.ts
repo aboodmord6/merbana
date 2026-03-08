@@ -5,15 +5,6 @@ import { DEFAULT_PASSWORD_REQUIREMENTS } from '../utils/passwordPolicy';
 
 const defaultSettings: StoreSettings = {
   companyName: '',
-  printerSettings: {
-    defaultPrinter: '',
-    kitchenPrinter: '',
-    defaultOptions: {},
-    printBehavior: 'customer_only',
-    autoPrint: false,
-    customerCopies: 1,
-    kitchenCopies: 1,
-  },
   security: {
     passwordRequiredFor: { ...DEFAULT_PASSWORD_REQUIREMENTS },
   },

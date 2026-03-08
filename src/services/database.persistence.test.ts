@@ -462,15 +462,6 @@ describe('Reload consistency after app close & reopen', () => {
       activityLog: [],
       settings: {
         companyName: 'Legacy',
-        printerSettings: {
-          defaultPrinter: '',
-          kitchenPrinter: '',
-          defaultOptions: {},
-          printBehavior: 'customer_only',
-          autoPrint: false,
-          customerCopies: 1,
-          kitchenCopies: 1,
-        },
       },
       debtors: [],
       lastStockReset: '',

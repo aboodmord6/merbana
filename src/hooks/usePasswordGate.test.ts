@@ -6,15 +6,6 @@ import type { SensitiveActionKey, StoreSettings, StoreUser } from '../types/type
 function makeSettings(overrides?: Partial<StoreSettings>): StoreSettings {
   return {
     companyName: 'Test',
-    printerSettings: {
-      defaultPrinter: '',
-      kitchenPrinter: '',
-      defaultOptions: {},
-      printBehavior: 'customer_only',
-      autoPrint: false,
-      customerCopies: 1,
-      kitchenCopies: 1,
-    },
     security: {
       passwordRequiredFor: {
         ...DEFAULT_PASSWORD_REQUIREMENTS,

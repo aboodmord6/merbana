@@ -54,18 +54,6 @@ export interface ActivityLog {
   timestamp: string;
 }
 
-export type PrintBehavior = 'customer_only' | 'kitchen_only' | 'both_separate';
-
-export interface PrinterSettings {
-  defaultPrinter: string;
-  kitchenPrinter?: string;
-  defaultOptions: Record<string, string>;
-  printBehavior: PrintBehavior;
-  autoPrint: boolean;
-  customerCopies: number;
-  kitchenCopies: number;
-}
-
 export type SensitiveActionKey =
   | 'create_order'
   | 'delete_order'
@@ -85,7 +73,6 @@ export interface SecuritySettings {
 
 export interface StoreSettings {
   companyName: string;
-  printerSettings: PrinterSettings;
   security: SecuritySettings;
 }
 
