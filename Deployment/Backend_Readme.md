@@ -201,12 +201,26 @@ Use `Deployment/build_linux.py` to package the app into a single Linux binary.
 
 ### Prerequisites (Ubuntu/Debian, GTK backend)
 
+Prefer the full installer script because it auto-detects distro package names:
+
+```bash
+bash Deployment/2_build_liunx.sh
+```
+
+If installing manually, use the correct WebKit package for your distro version.
+
 ```bash
 sudo apt update
 sudo apt install -y \
-  python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
-  libgtk-3-dev libwebkit2gtk-4.1-dev nodejs npm
+  python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+  libgtk-3-dev nodejs npm
 ```
+
+WebKit packages by distro:
+
+- Ubuntu 24.04 / Debian 13: `gir1.2-webkitgtk-6.0 libwebkitgtk-6.0-dev`
+- Ubuntu 22.04 / Debian 12: `gir1.2-webkit2-4.1 libwebkit2gtk-4.1-dev`
+- Ubuntu 20.04 / Debian 11: `gir1.2-webkit2-4.0 libwebkit2gtk-4.0-dev`
 
 Install project dependencies:
 

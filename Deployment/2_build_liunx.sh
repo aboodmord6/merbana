@@ -48,6 +48,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DIST_WEB="${PROJECT_ROOT}/dist"          # Vite output
 
+# Prefer distro Python so system packages like python3-gi are visible inside
+# the venv when using --system-site-packages.
+if [[ -x "/usr/bin/python3" ]]; then
+    BASE_PYTHON="/usr/bin/python3"
+else
+    BASE_PYTHON="$(command -v python3)"
+fi
+
 # ── Resolve the REAL user's Desktop even when running as root ─────────────────
 # Priority: SUDO_USER  →  PKEXEC_UID  →  last non-root login  →  current $HOME
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
@@ -247,16 +255,16 @@ mkdir -p "${APP_DIR}"
 # gi / WebKit2GTK are SYSTEM libraries — they cannot go inside a venv.
 # --system-site-packages makes the venv inherit them from the system Python,
 # while keeping pywebview isolated inside the venv.
-info "Creating Python venv at ${VENV_APP} …"
-python3 -m venv --system-site-packages --clear "${VENV_APP}"
+info "Creating Python venv at ${VENV_APP} using ${BASE_PYTHON} …"
+"${BASE_PYTHON}" -m venv --system-site-packages --clear "${VENV_APP}"
 success "venv created."
 
 # Verify that python3-gi (system PyGObject) is visible inside the venv
 if ! "${VENV_APP}/bin/python" -c "import gi" 2>/dev/null; then
     warn "'gi' (PyGObject) is not visible inside the venv."
-    warn "Trying to install PyGObject directly into the venv as fallback …"
-    "${VENV_APP}/bin/pip" install --quiet PyGObject || \
-        die "Could not make 'gi' available. Install python3-gi system package and re-run."
+    warn "System python: $("${BASE_PYTHON}" --version 2>/dev/null || echo unknown)"
+    warn "Venv python  : $("${VENV_APP}/bin/python" --version 2>/dev/null || echo unknown)"
+    die "Could not access system 'python3-gi' from venv. Ensure distro python3 + python3-gi are installed and re-run."
 fi
 success "PyGObject (gi) is accessible in venv."
 
