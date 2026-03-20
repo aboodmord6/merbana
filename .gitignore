@@ -54,8 +54,29 @@ venv/
 # PyInstaller
 *.manifest
 *.spec
-build/
+build_pyinstaller/
+.pytest_cache
 
+# Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.eslintcache
+
+# Test outputs and test folders
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+test-results/
+tests/
+**/tests/
+src/test/
 # Windows Build Output
 dist_windows/
 Merbana.exe
+
+# Linux Build Output
+dist_linux/
+Merbana
