@@ -45,13 +45,16 @@ require_cmd() {
 run_alembic_upgrade() {
   [[ -f "${ALEMBIC_INI}" ]] || fail "Alembic config not found: ${ALEMBIC_INI}"
 
+  local venv_python="${POS_DIR}/.venv/bin/python"
+  [[ -x "${venv_python}" ]] || fail "Venv Python not found: ${venv_python}"
+
   local db_url
   db_url="sqlite:///${SQLITE_FILE}"
 
   info "Running Alembic migrations to head"
   MERBANA_DATA_PATH="${DATA_DIR}" \
   MERBANA_DB_URL="${db_url}" \
-    python3 -m alembic -c "${ALEMBIC_INI}" upgrade head
+    "${venv_python}" -m alembic -c "${ALEMBIC_INI}" upgrade head
   ok "Alembic migrations completed."
 }
 
@@ -87,6 +90,9 @@ migrate_legacy_json_if_needed() {
   local migration_script="${REPO_DIR}/Deployment/migrate_json_to_sqlite.py"
   local artifacts_dir="${POS_DIR}/artifacts"
   local force_mode=false
+  local venv_python="${POS_DIR}/.venv/bin/python"
+
+  [[ -x "${venv_python}" ]] || fail "Venv Python not found: ${venv_python}"
 
   if [[ "${FORCE_JSON_REIMPORT}" == "1" || "${FORCE_JSON_REIMPORT}" == "true" || "${FORCE_JSON_REIMPORT}" == "TRUE" ]]; then
     force_mode=true
@@ -114,13 +120,13 @@ migrate_legacy_json_if_needed() {
 
   if [[ "${force_mode}" == true ]]; then
     MERBANA_DATA_PATH="${DATA_DIR}" \
-      python3 "${migration_script}" \
+      "${venv_python}" "${migration_script}" \
         --source "${DATA_FILE}" \
         --artifacts-dir "${artifacts_dir}" \
         --overwrite
   else
     MERBANA_DATA_PATH="${DATA_DIR}" \
-      python3 "${migration_script}" \
+      "${venv_python}" "${migration_script}" \
         --source "${DATA_FILE}" \
         --artifacts-dir "${artifacts_dir}"
   fi
@@ -175,7 +181,8 @@ cleanup_old_backups() {
 
 stop_app() {
   pkill -f "merbana_launcher.py" >/dev/null 2>&1 || true
-  pkill -f "${WRAPPER}" >/dev/null 2>&1 || true
+  pkill -f "Merbana" >/dev/null 2>&1 || true
+  pkill -f "uvicorn.*backend.app" >/dev/null 2>&1 || true
   sleep 1
 }
 
