@@ -236,136 +236,44 @@ run_migrations() {
   ok "Database migrations complete"
 }
 
-write_runtime_launcher() {
-  info "Writing GUI runtime launcher at ${RUNTIME_LAUNCHER_PY}"
-
-  cat > "${RUNTIME_LAUNCHER_PY}" <<EOF
-#!/usr/bin/env python3
-import os
-import socket
-import subprocess
-import sys
-import time
-from pathlib import Path
-from urllib.request import urlopen
-
-HOST = "127.0.0.1"
-PORT = int(os.environ.get("MERBANA_PORT", "8741"))
-APP_TITLE = "Merbana POS"
-
-POS_DIR = Path(r"${POS_DIR}")
-APP_DIR = Path(r"${POS_APP_DIR}")
-DIST_DIR = Path(r"${DIST_DST}")
-DATA_DIR = Path(r"${DATA_DIR}")
-VENV_PY = Path(r"${VENV_DIR}/bin/python")
-LOG_FILE = DATA_DIR / "launcher.log"
-
-
 def _is_port_open(host: str, port: int) -> bool:
-    with socket.socket() as sock:
-        sock.settimeout(0.4)
-        return sock.connect_ex((host, port)) == 0
-
-
 def _wait_for_health(url: str, timeout: float = 30.0) -> bool:
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        try:
-            with urlopen(url, timeout=1.5) as response:
-                if response.status == 200:
-                    return True
-        except Exception:
-            pass
-        time.sleep(0.4)
-    return False
-
-
 def _start_backend():
-    if _is_port_open(HOST, PORT):
-        return None, True
-
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    env = os.environ.copy()
-    env["MERBANA_DIST_PATH"] = str(DIST_DIR)
-    env["MERBANA_DATA_PATH"] = str(DATA_DIR)
-    env["MERBANA_DB_URL"] = f"sqlite:///{DATA_DIR / 'merbana.db'}"
-    env["PYTHONUNBUFFERED"] = "1"
-
-    log_handle = open(LOG_FILE, "a", encoding="utf-8")
-    proc = subprocess.Popen(
-        [
-            str(VENV_PY),
-            "-m",
-            "uvicorn",
-            "backend.app:app",
-            "--host",
-            HOST,
-            "--port",
-            str(PORT),
-            "--app-dir",
-            str(APP_DIR),
-        ],
-        cwd=str(APP_DIR),
-        env=env,
-        stdout=log_handle,
-        stderr=log_handle,
-    )
-
-    healthy = _wait_for_health(f"http://{HOST}:{PORT}/api/health")
-    return proc, healthy
-
-
 def _show_error(message: str) -> None:
-    try:
-        import tkinter as tk
-        from tkinter import messagebox
-
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror("Merbana POS", message)
-        root.destroy()
-    except Exception:
-        print(message, file=sys.stderr)
-
-
 def main() -> int:
-    if not VENV_PY.exists():
-        _show_error(f"Python runtime not found: {VENV_PY}")
-        return 1
+write_runtime_launcher() {
+  info "Writing browser-based runtime launcher at ${RUNTIME_LAUNCHER_PY}"
+  cat > "${RUNTIME_LAUNCHER_PY}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
 
-    backend_proc, backend_ready = _start_backend()
-    if not backend_ready:
-        _show_error(
-            "Backend failed to start. Check launcher.log in POS/data for details."
-        )
-        if backend_proc is not None:
-            backend_proc.terminate()
-        return 1
+VENV_PY="${VENV_DIR}/bin/python"
+APP_DIR="${POS_APP_DIR}"
+LOG_FILE="${DATA_DIR}/launcher.log"
+HOST="127.0.0.1"
+PORT="${MERBANA_PORT:-8741}"
 
-    url = f"http://{HOST}:{PORT}"
-    try:
-        import webview
+MERBANA_DIST_PATH="${DIST_DST}" \
+MERBANA_DATA_PATH="${DATA_DIR}" \
+MERBANA_DB_URL="sqlite:///${DATA_DIR}/merbana.db" \
+nohup "${VENV_PY}" -m uvicorn backend.app:app --host "${HOST}" --port "${PORT}" --app-dir "${APP_DIR}" > "${LOG_FILE}" 2>&1 &
 
-        webview.create_window(APP_TITLE, url, width=1280, height=820, resizable=True)
-        webview.start()
-    finally:
-        if backend_proc is not None and backend_proc.poll() is None:
-            backend_proc.terminate()
-            try:
-                backend_proc.wait(timeout=6)
-            except Exception:
-                backend_proc.kill()
+sleep 2
 
-    return 0
+timeout=30
+until curl -s "http://${HOST}:${PORT}/api/health" | grep -q '"status":'; do
+  timeout=$((timeout-1))
+  if [ "$timeout" -le 0 ]; then
+  echo "Backend failed to start. Check launcher.log in POS/data for details."
+  exit 1
+  fi
+  sleep 1
+done
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+xdg-open "http://${HOST}:${PORT}" || echo "Open http://${HOST}:${PORT} in your browser."
 EOF
-
   chmod +x "${RUNTIME_LAUNCHER_PY}"
-  ok "GUI runtime launcher created"
+  ok "Browser-based runtime launcher created"
 }
 
 write_wrapper() {
