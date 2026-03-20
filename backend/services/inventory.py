@@ -11,7 +11,7 @@ Provides functions for:
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -73,7 +73,7 @@ def bulk_set_stock(
     updates: list,
     user_id: Optional[str] = None,
     user_name: str = "System",
-) -> list[Product]:
+) -> List[Product]:
     """
     Set absolute stock values for multiple products.
 

@@ -7,6 +7,8 @@ This module collects all API routers and provides a registration
 function for the main FastAPI application.
 """
 
+from typing import List, Tuple
+
 from fastapi import APIRouter
 
 from .users import router as users_router
@@ -19,7 +21,7 @@ from .settings import router as settings_router
 from .activity import router as activity_router
 
 # Collect all routers with their prefixes
-routers: list[tuple[APIRouter, str, list[str]]] = [
+routers: List[Tuple[APIRouter, str, List[str]]] = [
     (users_router, "/users", ["Users"]),
     (categories_router, "/categories", ["Categories"]),
     (products_router, "/products", ["Products"]),

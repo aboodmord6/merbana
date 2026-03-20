@@ -9,6 +9,7 @@ Provides API endpoints and SPA serving for the desktop application.
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import List
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,7 +31,7 @@ def get_port() -> int:
     return int(os.environ.get("MERBANA_PORT", "8741"))
 
 
-def get_cors_origins() -> list[str]:
+def get_cors_origins() -> List[str]:
     """Get CORS origins based on current port."""
     port = get_port()
     return [

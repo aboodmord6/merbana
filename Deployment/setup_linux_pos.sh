@@ -43,6 +43,8 @@ DATA_DIR="${POS_DIR}/data"
 ARTIFACTS_DIR="${POS_DIR}/artifacts"
 BACKUPS_DIR="${POS_DIR}/backups"
 ALEMBIC_INI_DST="${DEPLOY_BACKEND_DST_DIR}/alembic.ini"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12.10}"
+UV_BIN="${UV_BIN:-$HOME/.local/bin/uv}"
 
 WEBKIT_GIR_PACKAGE=""
 PYWEBVIEW_SPEC="${PYWEBVIEW_SPEC:-}"
@@ -57,6 +59,19 @@ require_sudo() {
     info "Sudo access is required for OS package installation."
     sudo -v
   fi
+}
+
+ensure_uv_and_python() {
+  if [[ ! -x "${UV_BIN}" ]]; then
+    info "Installing uv at ${UV_BIN}"
+    require_cmd curl
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  fi
+
+  [[ -x "${UV_BIN}" ]] || fail "uv installation failed. Expected binary at ${UV_BIN}"
+
+  info "Installing Python ${PYTHON_VERSION} with uv"
+  "${UV_BIN}" python install "${PYTHON_VERSION}"
 }
 
 parse_ubuntu_release() {
@@ -189,8 +204,10 @@ copy_runtime_sources() {
 }
 
 setup_venv_and_python_deps() {
-  info "Creating Python virtual environment at ${VENV_DIR}"
-  python3 -m venv "${VENV_DIR}"
+  info "Creating Python ${PYTHON_VERSION} virtual environment at ${VENV_DIR}"
+  "${UV_BIN}" venv --python "${PYTHON_VERSION}" "${VENV_DIR}"
+
+  [[ -x "${VENV_DIR}/bin/python" ]] || fail "Python executable missing in venv: ${VENV_DIR}/bin/python"
 
   info "Installing Python dependencies in venv"
   "${VENV_DIR}/bin/python" -m pip install --upgrade pip setuptools wheel
@@ -424,6 +441,7 @@ main() {
   parse_ubuntu_release
   choose_webkit_package
   install_os_dependencies
+  ensure_uv_and_python
   build_frontend
   setup_pos_layout
   copy_runtime_sources
