@@ -236,11 +236,6 @@ run_migrations() {
   ok "Database migrations complete"
 }
 
-def _is_port_open(host: str, port: int) -> bool:
-def _wait_for_health(url: str, timeout: float = 30.0) -> bool:
-def _start_backend():
-def _show_error(message: str) -> None:
-def main() -> int:
 write_runtime_launcher() {
   info "Writing browser-based runtime launcher at ${RUNTIME_LAUNCHER_PY}"
   cat > "${RUNTIME_LAUNCHER_PY}" <<EOF
